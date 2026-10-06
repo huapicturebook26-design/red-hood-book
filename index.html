@@ -91,7 +91,11 @@ h1{font-size:23px;line-height:1.35;margin:0 0 12px;text-align:center}
     <div id="codebox" class="code hide"><input id="codein" type="password" placeholder="展場通行碼"><button class="go" id="codego">確定</button></div>
   </section>
 </main>
+<div id="dbg" style="display:none;position:fixed;left:8px;right:8px;bottom:8px;z-index:9;background:#b00020;color:#fff;padding:10px 14px;border-radius:12px;font-size:14px"></div>
 <script>
+function dbg(m){const d=document.getElementById('dbg');d.textContent=m;d.style.display='block'}
+addEventListener('error',e=>dbg('程式錯誤：'+e.message));
+addEventListener('unhandledrejection',e=>dbg('錯誤：'+((e.reason&&e.reason.message)||e.reason)));
 const Q=[
  {k:'gender',t:'小紅帽是男生，還是女生呢？',o:[{id:'girl',l:'女生',e:'👧',w:['女','妹','姊','姐']},{id:'boy',l:'男生',e:'👦',w:['男','弟','哥']}]},
  {k:'hair',t:'頭髮是長長的，還是短短的？',o:[{id:'long',l:'長長的',e:'🎀',w:['長','辮']},{id:'short',l:'短短的',e:'✂️',w:['短','平頭']}]},
@@ -164,13 +168,13 @@ async function gen(){
   const d=await r.json().catch(()=>({}));
   if(r.status===401){rounds--;fail('需要輸入展場通行碼',true);return}
   if(!r.ok||!d.images)throw new Error(d.error||'沒畫出來');
-  clearInterval(wt);$('qt').textContent='選一張你最喜歡的！';
+  clearInterval(wt);document.getElementById('dbg').style.display='none';$('qt').textContent='選一張你最喜歡的！';
   $('cands').innerHTML=d.images.map(u=>`<img src="${u}" alt="小紅帽" data-u="${u}">`).join('');
   $('again').classList.toggle('hide',rounds>=MAXROUNDS);show('vc');
  }catch(e){fail(e.message,false)}
 }
 function fail(m,needCode){
- clearInterval(wt);show('vr');$('qt').textContent='準備好了嗎？';
+ clearInterval(wt);dbg('失敗：'+m);show('vr');$('qt').textContent='準備好了嗎？';
  $('err').textContent=m;$('err').classList.remove('hide');$('codebox').classList.toggle('hide',!needCode);
 }
 $('opts').addEventListener('click',e=>{const b=e.target.closest('.opt');if(b){talk=true;choose(b.dataset.id)}});
@@ -182,7 +186,7 @@ $('say').onclick=()=>{talk=true;say(step>=Q.length?'都選好了！按下去，�
 $('back').onclick=()=>{talk=true;go(step-1)};
 $('back2').onclick=()=>go(Q.length-1);
 $('next').onclick=()=>{talk=true;go(step+1)};
-$('send').onclick=()=>{talk=true;gen()};
+$('send').onclick=()=>{try{talk=true;dbg('已送出，正在畫圖，請等 15～30 秒⋯');gen()}catch(e){dbg('按鈕錯誤：'+e.message)}};
 $('again').onclick=gen;
 $('codego').onclick=()=>{sessionStorage.setItem('code',$('codein').value.trim());gen()};
 $('done').onclick=()=>{
@@ -202,7 +206,7 @@ function progress(){
  $('smsg').textContent=n<7?`已畫好 ${n} / 7 頁`:'';
  if(n===7){$('qt').textContent='你的故事書完成了！';$('print').classList.remove('hide');localStorage.setItem('rh_book',JSON.stringify(book));say('你的故事書完成了！')}
 }
-async function gen(p){
+async function genPage(p){
  slot(p,'🖍️');
  const hist=book.pages.slice(0,p-2).map((x,i)=>x&&{p:i+2,caption:x.caption,cast:x.cast}).filter(Boolean);
  try{
@@ -215,7 +219,7 @@ async function gen(p){
  }catch(e){slot(p,`<button data-r="${p}">重畫</button>`)}
  progress();
 }
-const queue=p=>{chain=chain.then(()=>gen(p))};
+const queue=p=>{chain=chain.then(()=>genPage(p))};
 function story(){
  book={cover:chosen,pages:Array(7).fill(null)};said={};node=0;chain=Promise.resolve();
  $('qt').textContent='一起來編故事吧！';show('vs');$('print').classList.add('hide');
@@ -251,7 +255,7 @@ $('qc').addEventListener('click',e=>{const b=e.target.closest('button');if(b){ta
 $('typed').addEventListener('input',e=>setSaid(e.target.value));
 $('smic').onclick=listen;$('sok').onclick=answer;
 $('sq').onclick=()=>{talk=true;if(node<NODES.length)say(NODES[node].q)};
-$('pages').addEventListener('click',e=>{const b=e.target.closest('button');if(b){const p=+b.dataset.r;chain=chain.then(()=>gen(p))}});
+$('pages').addEventListener('click',e=>{const b=e.target.closest('button');if(b){const p=+b.dataset.r;chain=chain.then(()=>genPage(p))}});
 $('print').onclick=()=>window.open('print.html','_blank');
 render();
 </script>
