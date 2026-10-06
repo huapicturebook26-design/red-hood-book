@@ -48,6 +48,7 @@ h1{font-size:23px;line-height:1.35;margin:0 0 12px;text-align:center}
 .qc{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:8px}.qc button{font:inherit;font-size:15px;padding:8px 12px;border-radius:16px;border:2px solid var(--line);background:#fff;cursor:pointer}
 .ask input{width:100%;font:inherit;padding:10px;border-radius:14px;border:2px solid var(--line);margin-top:8px}
 .smic{width:72px;height:72px;font-size:12px}.smic span{font-size:28px}
+.cap{font-size:11px;line-height:1.3;margin-top:3px;color:var(--soft);min-height:30px;text-align:left}
 .pg{position:relative;aspect-ratio:3/4;border-radius:10px;border:2px solid var(--line);background:var(--sel);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:22px}
 .pg img{width:100%;height:100%;object-fit:cover}.pg b{position:absolute;left:4px;top:3px;background:#fff;border-radius:50%;width:22px;height:22px;font-size:13px;line-height:22px}
 .pg button{font:inherit;font-size:14px;padding:6px 10px;border-radius:12px;border:2px solid var(--line);background:#fff}
@@ -203,7 +204,8 @@ function slot(p,h){$('pg'+p).innerHTML=`<b>${p}</b>`+h}
 function code(){return {'Content-Type':'application/json','x-access-code':sessionStorage.getItem('code')||''}}
 function progress(){
  const n=book.pages.filter(Boolean).length;
- $('smsg').textContent=n<7?`已畫好 ${n} / 7 頁`:'';
+ const ml=window.lastMode?(window.lastMode==='gemini'?'Gemini 模式':'備用翻譯模式（Gemini 沒有啟用）'):'';
+ $('smsg').textContent=(n<7?`已畫好 ${n} / 7 頁　`:'')+ml;
  if(n===7){$('qt').textContent='你的故事書完成了！';$('print').classList.remove('hide');localStorage.setItem('rh_book',JSON.stringify(book));say('你的故事書完成了！')}
 }
 async function genPage(p){
@@ -213,17 +215,17 @@ async function genPage(p){
   const r=await fetch('/api/page',{method:'POST',headers:code(),body:JSON.stringify({image:book.cover,page:p,said:said[p]||'',history:hist})});
   const d=await r.json().catch(()=>({}));
   if(r.status===401){sessionStorage.removeItem('code');throw new Error('code')}
-  if(!r.ok||!d.image)throw new Error(d.error||'失敗');
-  book.pages[p-2]={image:d.image,caption:d.caption,cast:d.cast};
+  if(!r.ok||!d.image)throw new Error((d.error||'失敗')+(d.detail?' '+JSON.stringify(d.detail).slice(0,300):''));
+  book.pages[p-2]={image:d.image,caption:d.caption,cast:d.cast};window.lastMode=d.mode;$('cap'+p).textContent=d.caption||'';
   slot(p,`<img src="${d.image}" alt="第${p}頁">`);
- }catch(e){slot(p,`<button data-r="${p}">重畫</button>`)}
+ }catch(e){slot(p,`<button data-r="${p}">重畫</button>`);dbg('第'+p+'頁失敗：'+e.message)}
  progress();
 }
 const queue=p=>{chain=chain.then(()=>genPage(p))};
 function story(){
  book={cover:chosen,pages:Array(7).fill(null)};said={};node=0;chain=Promise.resolve();
  $('qt').textContent='一起來編故事吧！';show('vs');$('print').classList.add('hide');
- $('pages').innerHTML=book.pages.map((_,i)=>`<div class="pg" id="pg${i+2}"><b>${i+2}</b>🖍️</div>`).join('');
+ $('pages').innerHTML=book.pages.map((_,i)=>`<div><div class="pg" id="pg${i+2}"><b>${i+2}</b>🖍️</div><div class="cap" id="cap${i+2}"></div></div>`).join('');
  queue(2);ask();
 }
 function ask(){
