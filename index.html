@@ -205,7 +205,7 @@ function code(){return {'Content-Type':'application/json','x-access-code':sessio
 function progress(){
  const n=book.pages.filter(Boolean).length;
  const ml=window.lastMode?(window.lastMode==='gemini'?'Gemini 模式':'備用翻譯模式｜Gemini 原因：'+(window.lastErr||'未知')):'';
- $('smsg').textContent=(n<7?`已畫好 ${n} / 7 頁　`:'')+ml;
+ $('smsg').textContent=(n<7?`已畫好 ${n} / 7 頁　`:'')+ml+(window.srvVer?`　｜　${window.srvVer}`:'');
  if(n===7){$('qt').textContent='你的故事書完成了！';$('print').classList.remove('hide');localStorage.setItem('rh_book',JSON.stringify(book));say('你的故事書完成了！')}
 }
 async function genPage(p){
@@ -223,6 +223,7 @@ async function genPage(p){
 }
 const queue=p=>{chain=chain.then(()=>genPage(p))};
 function story(){
+ window.srvVer='檢查中';fetch('/api/page').then(r=>r.text()).then(t=>{window.srvVer=/^page\.js v\d+/.test(t)?t:'⚠️ 伺服器還是舊版 page.js';progress()}).catch(()=>{window.srvVer='?'});
  book={cover:chosen,pages:Array(7).fill(null)};said={};node=0;chain=Promise.resolve();
  $('qt').textContent='一起來編故事吧！';show('vs');$('print').classList.add('hide');
  $('pages').innerHTML=book.pages.map((_,i)=>`<div><div class="pg" id="pg${i+2}"><b>${i+2}</b>🖍️</div><div class="cap" id="cap${i+2}"></div></div>`).join('');

@@ -73,5 +73,5 @@ async function main(){
   $('msg').textContent='排好了！按上面的按鈕開啟 PDF，再用「分享 → 列印」（A4，會自動是橫向）。';
  },'image/jpeg',0.92);
 }
-main().catch(e=>{$('msg').textContent='圖片讀取失敗（'+(e&&e.message)+'）。請確認 api/page.js 已更新，或回上一頁再按一次列印。'});
+main().catch(e=>{$('msg').textContent='圖片讀取失敗（'+(e&&e.message)+'）。這代表伺服器上的 api/page.js 還是舊版，請重新貼上最新的 page.js。'});
 </script></body></html>
