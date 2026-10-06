@@ -43,6 +43,10 @@ h1{font-size:23px;line-height:1.35;margin:0 0 12px;text-align:center}
 .wait{font-size:20px;padding:18px 0}.spin{display:inline-block;animation:sp 1.2s linear infinite;font-size:34px}
 @keyframes sp{to{transform:rotate(360deg)}}
 .code{display:flex;gap:8px;margin-top:10px}.code input{flex:1;font:inherit;padding:10px;border-radius:14px;border:2px solid var(--line)}
+.pages{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+.pg{position:relative;aspect-ratio:3/4;border-radius:12px;border:2px solid var(--line);background:var(--sel);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:30px}
+.pg img{width:100%;height:100%;object-fit:cover}.pg b{position:absolute;left:4px;top:3px;background:#fff;border-radius:50%;width:22px;height:22px;font-size:13px;line-height:22px}
+.pg button{font:inherit;font-size:14px;padding:6px 10px;border-radius:12px;border:2px solid var(--line);background:#fff}
 .hide{display:none!important}
 .ghost:focus-visible,.go:focus-visible,.mic:focus-visible,.opt:focus-visible,.dots button:focus-visible{outline:3px solid var(--acc);outline-offset:3px}
 @media (prefers-reduced-motion:reduce){.hero,.chip,.mic.on,.spin{animation:none}}
@@ -73,6 +77,7 @@ h1{font-size:23px;line-height:1.35;margin:0 0 12px;text-align:center}
       <div class="cands" id="cands"></div>
       <div class="bar" style="justify-content:center;gap:12px"><button class="ghost" id="again">再畫一次</button><button class="go" id="done" disabled>就是她！</button></div>
     </div>
+    <div id="vs" class="hide center"><div class="pages" id="pages"></div><p class="note" id="smsg"></p><div class="bar" style="justify-content:center"><button class="go hide" id="print">🖨 列印小書</button></div></div>
     <div id="vd" class="hide center"><p style="font-size:20px">太棒了，這就是你的小紅帽！</p><p class="note">下一步：用她來演故事（下個版本加入）。</p></div>
     <div id="err" class="note center hide"></div>
     <div id="codebox" class="code hide"><input id="codein" type="password" placeholder="展場通行碼"><button class="go" id="codego">確定</button></div>
@@ -88,7 +93,7 @@ const Q=[
 const MAXROUNDS=2;
 let ans={basket:[]},step=0,talk=false,rec=null,rounds=0,chosen=null;
 const $=i=>document.getElementById(i);
-const show=id=>['vq','vr','vw','vc','vd'].forEach(x=>$(x).classList.toggle('hide',x!==id));
+const show=id=>['vq','vr','vw','vc','vd','vs'].forEach(x=>$(x).classList.toggle('hide',x!==id));
 const find=(k,id)=>Q.find(q=>q.k===k).o.find(o=>o.id===id);
 
 function say(t){if(!talk||!window.speechSynthesis)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='zh-TW';u.rate=.9;speechSynthesis.speak(u)}
@@ -144,7 +149,7 @@ function mic(){
 const MSG=['小紅帽正在換衣服⋯','正在挑水果籃⋯','蠟筆正在塗顏色⋯','快好了，再等一下下！'];
 let wt=null;
 async function gen(){
- rounds++;chosen=null;$('done').disabled=true;show('vw');$('qt').textContent='畫畫中';
+ $('err').classList.add('hide');$('codebox').classList.add('hide');rounds++;chosen=null;$('done').disabled=true;show('vw');$('qt').textContent='畫畫中';
  let i=0;$('wmsg').textContent=MSG[0];wt=setInterval(()=>{$('wmsg').textContent=MSG[++i%MSG.length]},3500);
  try{
   const r=await fetch('/api/character',{method:'POST',headers:{'Content-Type':'application/json','x-access-code':sessionStorage.getItem('code')||''},body:JSON.stringify(ans)});
@@ -175,8 +180,31 @@ $('codego').onclick=()=>{sessionStorage.setItem('code',$('codein').value.trim())
 $('done').onclick=()=>{
  sessionStorage.setItem('rh_char',JSON.stringify({url:chosen,ans}));
  $('hero').src=chosen;$('hero').style.aspectRatio='3/4';$('chips').innerHTML='';
- $('qt').textContent='完成！';show('vd');say('太棒了，這就是你的小紅帽！');
+ story();
 };
+let book=null;
+function pgHTML(i,st,u){return `<b>${i+2}</b>`+(u?`<img src="${u}" alt="第${i+2}頁">`:st==='err'?`<button data-r="${i}">重畫</button>`:'🖍️')}
+async function story(){
+ book={cover:chosen,pages:Array(6).fill(null)};
+ $('qt').textContent='故事畫畫中⋯';show('vs');$('print').classList.add('hide');
+ $('pages').innerHTML=book.pages.map((_,i)=>`<div class="pg" id="pg${i}">${pgHTML(i,'wait')}</div>`).join('');
+ say('故事開始囉，小紅帽要出發了！');
+ await Promise.all(book.pages.map((_,i)=>one(i)));
+}
+async function one(i){
+ $('pg'+i).innerHTML=pgHTML(i,'wait');
+ try{
+  const r=await fetch('/api/story',{method:'POST',headers:{'Content-Type':'application/json','x-access-code':sessionStorage.getItem('code')||''},body:JSON.stringify({image:book.cover,scene:i})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||!d.image)throw new Error(d.error||'失敗');
+  book.pages[i]=d.image;$('pg'+i).innerHTML=pgHTML(i,'ok',d.image);
+ }catch(e){$('pg'+i).innerHTML=pgHTML(i,'err')}
+ const n=book.pages.filter(Boolean).length;
+ $('smsg').textContent=n<6?`已畫好 ${n} / 6 頁`:'';
+ if(n===6){$('qt').textContent='你的故事書完成了！';$('print').classList.remove('hide');localStorage.setItem('rh_book',JSON.stringify(book));say('你的故事書完成了！')}
+}
+$('pages').addEventListener('click',e=>{const b=e.target.closest('button');if(b)one(+b.dataset.r)});
+$('print').onclick=()=>window.open('print.html','_blank');
 render();
 </script>
 </body>
