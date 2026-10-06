@@ -17,9 +17,59 @@ const SYSTEM = `You are the story editor of an interactive "Little Red Riding Ho
 
 const clip = (s, n) => String(s || '').slice(0, n);
 
+async function viaGemini(userMsg) {
+  const gr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: [{ role: 'user', parts: [{ text: userMsg }] }],
+      generationConfig: {
+        temperature: 0.9,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: { caption_zh: { type: 'STRING' }, scene_en: { type: 'STRING' }, cast_en: { type: 'ARRAY', items: { type: 'STRING' } } },
+          required: ['caption_zh', 'scene_en', 'cast_en'],
+        },
+      },
+    }),
+  }).then((r) => r.json());
+  const o = JSON.parse(gr.candidates[0].content.parts[0].text);
+  if (!o.scene_en || !o.caption_zh) throw new Error('empty');
+  return o;
+}
+
+// 備用方案：MyMemory 免費翻譯 + 固定劇情模板（Gemini 不能用時自動啟動）
+const BAD = /殺|死|血|打架|打人|咬|吃掉|吞|槍|刀|炸|火|毒|裸|色/;
+async function tr(text) {
+  try {
+    const email = process.env.MYMEMORY_EMAIL ? `&de=${encodeURIComponent(process.env.MYMEMORY_EMAIL)}` : '';
+    const r = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0, 150))}&langpair=zh-TW|en${email}`).then((x) => x.json());
+    const t = r && r.responseData && r.responseData.translatedText;
+    if (t && Number(r.responseStatus) === 200 && !/MYMEMORY WARNING/i.test(t)) return t;
+  } catch (e) {}
+  return '';
+}
+async function fallback(page, said) {
+  const z = BAD.test(said) ? '' : said.replace(/[。！!？?]+$/, '');
+  const x = z ? await tr(z) : '';
+  const soft = ' Keep everything gentle, friendly and child-friendly.';
+  const T = {
+    2: ['at the door of a cozy cottage, the mother hands the child a basket of treats and reminds the child to stay on the big path, the child smiles', '媽媽說：走大路，不要亂跑喔！'],
+    3: [`in the forest, the child meets a wolf. The wolf: ${x || 'a friendly cute cartoon wolf'}. The wolf looks friendly and funny, not scary`, z ? `森林裡，小紅帽遇見了${z}。` : '森林裡，小紅帽遇見了一隻友善的大野狼。'],
+    4: [`on the way through the forest, the child ${x || 'follows the path'}`, z ? `小紅帽決定${z}。` : '小紅帽繼續沿著小路往前走。'],
+    5: ["the child arrives at grandmother's cottage and finds that something is wrong, grandmother needs help, worried but gentle faces", '到了外婆家，咦？好像出了一點小狀況。'],
+    6: [`the trouble gets solved when help arrives: ${x || 'a kind helper arrives'}. Everyone is working together, kind and happy`, z ? `${z}，大家一起解決了問題！` : '有人來幫忙，大家一起解決了問題！'],
+    7: ['everyone makes peace and shares the treats from the basket at a cozy table, the wolf is now a friend', '大家和好了，一起分享籃子裡的點心。'],
+    8: ['all the characters from the story, including the wolf, grandmother and the helpers, stand together holding hands in a circle, the child in the middle, everyone smiling', '大家手牽手，成為好朋友！'],
+  }[page];
+  return { scene_en: T[0] + '.' + soft, caption_zh: T[1], cast_en: [] };
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-  if (!process.env.FAL_KEY || !process.env.GEMINI_API_KEY) return res.status(500).json({ error: '伺服器還沒設定 FAL_KEY 或 GEMINI_API_KEY' });
+  if (!process.env.FAL_KEY) return res.status(500).json({ error: '伺服器還沒設定 FAL_KEY' });
   const code = process.env.ACCESS_CODE;
   if (code && req.headers['x-access-code'] !== code) return res.status(401).json({ error: '需要展場通行碼' });
   let b = req.body;
@@ -40,29 +90,11 @@ module.exports = async (req, res) => {
     (page === 8 ? '\nInclude ALL characters so far in the final group picture.' : '');
 
   try {
-    const gr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM }] },
-        contents: [{ role: 'user', parts: [{ text: userMsg }] }],
-        generationConfig: {
-          temperature: 0.9,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: { caption_zh: { type: 'STRING' }, scene_en: { type: 'STRING' }, cast_en: { type: 'ARRAY', items: { type: 'STRING' } } },
-            required: ['caption_zh', 'scene_en', 'cast_en'],
-          },
-        },
-      }),
-    }).then((r) => r.json());
-    let s;
-    try { s = JSON.parse(gr.candidates[0].content.parts[0].text); } catch (e) {
-      return res.status(502).json({ error: 'Gemini 沒有回覆，再試一次', detail: gr.error || gr.promptFeedback || null });
-    }
+    let sc = null, mode = 'gemini';
+    if (process.env.GEMINI_API_KEY) { try { sc = await viaGemini(userMsg); } catch (e) { sc = null; } }
+    if (!sc) { mode = 'mymemory'; sc = await fallback(page, said); }
     const prompt =
-      `The same child in the red hooded cape from the reference image, ${clip(s.scene_en, 500)}. ` +
+      `The same child in the red hooded cape from the reference image, ${clip(sc.scene_en, 500).replace(/[.\s]+$/, '')}. ` +
       `Keep the child's face, hair, skin tone and outfit exactly identical to the reference image. ` +
       (page === 8 ? 'Wide shot, everyone fully visible, the child clearly visible in the middle. ' : 'Medium shot with the child large in the frame and the face clearly visible. ') +
       `Same crayon drawing style with light wash of color, visible waxy crayon strokes, rough paper grain, warm gentle palette. No signature, no stamp, no text`;
@@ -73,7 +105,7 @@ module.exports = async (req, res) => {
     }).then((r) => r.json());
     const image = fr && fr.images && fr.images[0] && fr.images[0].url;
     if (!image) return res.status(502).json({ error: '這一頁沒畫出來', detail: fr });
-    return res.status(200).json({ image, caption: clip(s.caption_zh, 40), cast: (s.cast_en || []).slice(0, 4).map((c) => clip(c, 120)) });
+    return res.status(200).json({ image, mode, caption: clip(sc.caption_zh, 40), cast: (sc.cast_en || []).slice(0, 4).map((c) => clip(c, 120)) });
   } catch (e) {
     return res.status(500).json({ error: '生成時發生錯誤：' + e.message });
   }
