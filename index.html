@@ -216,7 +216,7 @@ async function genPage(p){
   const d=await r.json().catch(()=>({}));
   if(r.status===401){sessionStorage.removeItem('code');throw new Error('code')}
   if(!r.ok||!d.image)throw new Error((d.error||'失敗')+(d.detail?' '+JSON.stringify(d.detail).slice(0,300):''));
-  book.pages[p-2]={image:d.image,caption:d.caption,cast:d.cast};window.lastMode=d.mode;window.lastErr=d.gerr||'';$('cap'+p).textContent=d.caption||'';
+  book.pages[p-2]={image:d.image,caption:d.caption,cast:d.cast};if(d.mode!=='fixed'){window.lastMode=d.mode;window.lastErr=d.gerr||''}$('cap'+p).textContent=d.caption||'';
   slot(p,`<img src="${d.image}" alt="第${p}頁">`);
  }catch(e){slot(p,`<button data-r="${p}">重畫</button>`);dbg('第'+p+'頁失敗：'+e.message)}
  progress();
