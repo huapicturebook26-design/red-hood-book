@@ -43,8 +43,12 @@ h1{font-size:23px;line-height:1.35;margin:0 0 12px;text-align:center}
 .wait{font-size:20px;padding:18px 0}.spin{display:inline-block;animation:sp 1.2s linear infinite;font-size:34px}
 @keyframes sp{to{transform:rotate(360deg)}}
 .code{display:flex;gap:8px;margin-top:10px}.code input{flex:1;font:inherit;padding:10px;border-radius:14px;border:2px solid var(--line)}
-.pages{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
-.pg{position:relative;aspect-ratio:3/4;border-radius:12px;border:2px solid var(--line);background:var(--sel);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:30px}
+.pages{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0}
+.ask{margin:10px 0;padding:12px;background:var(--sel);border-radius:20px}.ask h2{font-size:19px;margin:0 0 8px}
+.qc{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:8px}.qc button{font:inherit;font-size:15px;padding:8px 12px;border-radius:16px;border:2px solid var(--line);background:#fff;cursor:pointer}
+.ask input{width:100%;font:inherit;padding:10px;border-radius:14px;border:2px solid var(--line);margin-top:8px}
+.smic{width:72px;height:72px;font-size:12px}.smic span{font-size:28px}
+.pg{position:relative;aspect-ratio:3/4;border-radius:10px;border:2px solid var(--line);background:var(--sel);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:22px}
 .pg img{width:100%;height:100%;object-fit:cover}.pg b{position:absolute;left:4px;top:3px;background:#fff;border-radius:50%;width:22px;height:22px;font-size:13px;line-height:22px}
 .pg button{font:inherit;font-size:14px;padding:6px 10px;border-radius:12px;border:2px solid var(--line);background:#fff}
 .hide{display:none!important}
@@ -77,7 +81,11 @@ h1{font-size:23px;line-height:1.35;margin:0 0 12px;text-align:center}
       <div class="cands" id="cands"></div>
       <div class="bar" style="justify-content:center;gap:12px"><button class="ghost" id="again">再畫一次</button><button class="go" id="done" disabled>就是她！</button></div>
     </div>
-    <div id="vs" class="hide center"><div class="pages" id="pages"></div><p class="note" id="smsg"></p><div class="bar" style="justify-content:center"><button class="go hide" id="print">🖨 列印小書</button></div></div>
+    <div id="vs" class="hide center"><div class="pages" id="pages"></div><p class="note" id="smsg"></p>
+      <div class="ask" id="ask"><h2 id="aq"></h2><div class="qc" id="qc"></div><div class="heard" id="said"></div>
+       <div class="bar"><button class="mic smic" id="smic" aria-label="按一下，說出你的想法"><span>🎤</span>說話</button><button class="ghost say" id="sq" aria-label="再聽一次問題"><span>👂</span><small>聽問題</small></button><button class="go" id="sok" disabled>就這樣！</button></div>
+       <input id="typed" placeholder="也可以直接打字"></div>
+      <div class="bar" style="justify-content:center"><button class="go hide" id="print">🖨 列印小書</button></div></div>
     <div id="vd" class="hide center"><p style="font-size:20px">太棒了，這就是你的小紅帽！</p><p class="note">下一步：用她來演故事（下個版本加入）。</p></div>
     <div id="err" class="note center hide"></div>
     <div id="codebox" class="code hide"><input id="codein" type="password" placeholder="展場通行碼"><button class="go" id="codego">確定</button></div>
@@ -182,28 +190,68 @@ $('done').onclick=()=>{
  $('hero').src=chosen;$('hero').style.aspectRatio='3/4';$('chips').innerHTML='';
  story();
 };
-let book=null;
-function pgHTML(i,st,u){return `<b>${i+2}</b>`+(u?`<img src="${u}" alt="第${i+2}頁">`:st==='err'?`<button data-r="${i}">重畫</button>`:'🖍️')}
-async function story(){
- book={cover:chosen,pages:Array(6).fill(null)};
- $('qt').textContent='故事畫畫中⋯';show('vs');$('print').classList.add('hide');
- $('pages').innerHTML=book.pages.map((_,i)=>`<div class="pg" id="pg${i}">${pgHTML(i,'wait')}</div>`).join('');
- say('故事開始囉，小紅帽要出發了！');
- await Promise.all(book.pages.map((_,i)=>one(i)));
-}
-async function one(i){
- $('pg'+i).innerHTML=pgHTML(i,'wait');
- try{
-  const r=await fetch('/api/story',{method:'POST',headers:{'Content-Type':'application/json','x-access-code':sessionStorage.getItem('code')||''},body:JSON.stringify({image:book.cover,scene:i})});
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok||!d.image)throw new Error(d.error||'失敗');
-  book.pages[i]=d.image;$('pg'+i).innerHTML=pgHTML(i,'ok',d.image);
- }catch(e){$('pg'+i).innerHTML=pgHTML(i,'err')}
+let book=null,chain=Promise.resolve(),pending='',node=0,said={};
+const NODES=[
+ {p:3,q:'小紅帽在森林裡遇到大野狼了！這隻大野狼是什麼樣子？牠說了什麼？',c:['一隻害羞的大野狼','一隻戴著帽子的大野狼','一隻肚子餓的大野狼','一隻愛講笑話的大野狼']},
+ {p:4,q:'接下來，小紅帽怎麼做呢？',c:['照媽媽的話走大路','去摘漂亮的花','請大野狼一起走','跟著小鳥走']},
+ {p:6,q:'外婆家出了狀況！誰來幫忙？怎麼幫忙？',c:['媽媽來幫忙','森林裡的小動物們','小紅帽自己想辦法','獵人叔叔來幫忙']}];
+function slot(p,h){$('pg'+p).innerHTML=`<b>${p}</b>`+h}
+function code(){return {'Content-Type':'application/json','x-access-code':sessionStorage.getItem('code')||''}}
+function progress(){
  const n=book.pages.filter(Boolean).length;
- $('smsg').textContent=n<6?`已畫好 ${n} / 6 頁`:'';
- if(n===6){$('qt').textContent='你的故事書完成了！';$('print').classList.remove('hide');localStorage.setItem('rh_book',JSON.stringify(book));say('你的故事書完成了！')}
+ $('smsg').textContent=n<7?`已畫好 ${n} / 7 頁`:'';
+ if(n===7){$('qt').textContent='你的故事書完成了！';$('print').classList.remove('hide');localStorage.setItem('rh_book',JSON.stringify(book));say('你的故事書完成了！')}
 }
-$('pages').addEventListener('click',e=>{const b=e.target.closest('button');if(b)one(+b.dataset.r)});
+async function gen(p){
+ slot(p,'🖍️');
+ const hist=book.pages.slice(0,p-2).map((x,i)=>x&&{p:i+2,caption:x.caption,cast:x.cast}).filter(Boolean);
+ try{
+  const r=await fetch('/api/page',{method:'POST',headers:code(),body:JSON.stringify({image:book.cover,page:p,said:said[p]||'',history:hist})});
+  const d=await r.json().catch(()=>({}));
+  if(r.status===401){sessionStorage.removeItem('code');throw new Error('code')}
+  if(!r.ok||!d.image)throw new Error(d.error||'失敗');
+  book.pages[p-2]={image:d.image,caption:d.caption,cast:d.cast};
+  slot(p,`<img src="${d.image}" alt="第${p}頁">`);
+ }catch(e){slot(p,`<button data-r="${p}">重畫</button>`)}
+ progress();
+}
+const queue=p=>{chain=chain.then(()=>gen(p))};
+function story(){
+ book={cover:chosen,pages:Array(7).fill(null)};said={};node=0;chain=Promise.resolve();
+ $('qt').textContent='一起來編故事吧！';show('vs');$('print').classList.add('hide');
+ $('pages').innerHTML=book.pages.map((_,i)=>`<div class="pg" id="pg${i+2}"><b>${i+2}</b>🖍️</div>`).join('');
+ queue(2);ask();
+}
+function ask(){
+ pending='';$('sok').disabled=true;$('said').textContent='';$('typed').value='';
+ if(node>=NODES.length){$('ask').classList.add('hide');$('smsg').textContent='故事繪製中，請稍等⋯';return}
+ const n=NODES[node];$('ask').classList.remove('hide');$('aq').textContent=n.q;
+ $('qc').innerHTML=n.c.map(c=>`<button>${c}</button>`).join('');say(n.q);
+}
+function setSaid(t){pending=t.trim();$('said').textContent=pending?`我聽到：「${pending}」`:'';$('sok').disabled=!pending}
+function listen(){
+ talk=true;const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR){$('said').textContent='這個瀏覽器不能語音辨識，請點選項或打字';return}
+ if(rec){rec.stop();return}
+ if(window.speechSynthesis)speechSynthesis.cancel();
+ rec=new SR();rec.lang='zh-TW';rec.interimResults=false;
+ $('smic').classList.add('on');$('said').textContent='我在聽⋯⋯請說';
+ rec.onresult=e=>setSaid(e.results[0][0].transcript);
+ rec.onerror=()=>{$('said').textContent='沒聽到，再按一次麥克風，或點選項、打字'};
+ rec.onend=()=>{rec=null;$('smic').classList.remove('on')};
+ try{rec.start()}catch(_){rec=null;$('smic').classList.remove('on')}
+}
+function answer(){
+ if(!pending)return;const n=NODES[node];said[n.p]=pending;queue(n.p);
+ if(n.p===4)queue(5);
+ if(n.p===6){queue(7);queue(8)}
+ node++;ask();
+}
+$('qc').addEventListener('click',e=>{const b=e.target.closest('button');if(b){talk=true;setSaid(b.textContent)}});
+$('typed').addEventListener('input',e=>setSaid(e.target.value));
+$('smic').onclick=listen;$('sok').onclick=answer;
+$('sq').onclick=()=>{talk=true;if(node<NODES.length)say(NODES[node].q)};
+$('pages').addEventListener('click',e=>{const b=e.target.closest('button');if(b){const p=+b.dataset.r;chain=chain.then(()=>gen(p))}});
 $('print').onclick=()=>window.open('print.html','_blank');
 render();
 </script>

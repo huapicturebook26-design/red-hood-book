@@ -2,44 +2,76 @@
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>列印小書</title>
 <style>
-@page{size:A4 landscape;margin:0}
 *{box-sizing:border-box}body{margin:0;background:#e9efe2;font:500 16px/1.6 "PingFang TC","Noto Sans TC",sans-serif;color:#3b4a3e}
-.tools{padding:12px 16px;text-align:center}.tools button{font:inherit;font-weight:700;padding:12px 22px;border-radius:16px;border:0;background:#5f9669;color:#fff;cursor:pointer}
-.tools p{margin:8px auto;max-width:640px;font-size:14px;color:#6f7f72}
-.sheet{width:297mm;height:210mm;position:relative;background:#fff;margin:0 auto;overflow:hidden}
-.grid{position:absolute;left:6mm;top:6mm;right:6mm;bottom:6mm;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:1fr 1fr}
-.p{position:relative;overflow:hidden;padding:1.5mm}.p.rot{transform:rotate(180deg)}
-.p img{width:100%;height:100%;object-fit:cover;display:block}
-.back{width:100%;height:100%;background:#faf6e8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6mm;text-align:center;color:#5a4c40}
-.back b{font-size:34pt}.back span{font-size:9pt}.back i{display:block;width:44mm;border-bottom:.4mm solid #5a4c40;height:8mm}
-.fold{position:absolute;border-color:#999;border-style:dashed;border-width:0}
-.cut{position:absolute;left:calc(6mm + 71.25mm);width:142.5mm;top:105mm;border-top:.5mm dashed #d91a1a}
-.lbl{position:absolute;left:50%;top:105mm;transform:translate(-50%,-50%);background:#fff;color:#d91a1a;font-size:8pt;padding:.5mm 3mm;border-radius:2mm}
+.tools{padding:14px 16px;text-align:center}
+.btn{display:inline-block;font:inherit;font-weight:700;padding:14px 26px;border-radius:16px;background:#5f9669;color:#fff;text-decoration:none}
+.hide{display:none}.tools p{margin:10px auto;max-width:640px;font-size:15px;color:#6f7f72}
+canvas{display:block;width:min(100%,1100px);margin:8px auto;background:#fff;box-shadow:0 3px 12px rgba(0,0,0,.15)}
 .help{max-width:640px;margin:14px auto;padding:0 16px;font-size:15px}
-@media print{body{background:#fff}.tools,.help{display:none}.sheet{zoom:1!important;margin:0}}
 </style></head><body>
-<div class="tools"><button onclick="print()">🖨 列印</button>
-<p>紙張選 A4、橫向，縮放 100%，並關閉「頁首頁尾」。印好後沿紅色虛線剪開中間兩格，再照下面的步驟摺。</p></div>
-<div class="sheet" id="sheet"><div class="grid" id="grid"></div>
-<div class="fold" style="left:6mm;right:6mm;top:105mm;border-top-width:.2mm"></div>
-<div class="fold" style="top:6mm;bottom:6mm;left:calc(6mm + 71.25mm);border-left-width:.2mm"></div>
-<div class="fold" style="top:6mm;bottom:6mm;left:calc(6mm + 142.5mm);border-left-width:.2mm"></div>
-<div class="fold" style="top:6mm;bottom:6mm;left:calc(6mm + 213.75mm);border-left-width:.2mm"></div>
-<div class="cut"></div><div class="lbl">沿紅線剪開（只剪中間兩格）</div></div>
+<div class="tools"><a id="pdf" class="btn hide" target="_blank" rel="noopener">開啟 PDF 來列印</a>
+<p id="msg">正在排版⋯</p></div>
+<canvas id="cv" width="2339" height="1654"></canvas>
 <div class="help"><b>怎麼摺：</b><ol>
 <li>整張紙橫著對摺（圖在外面），再左右對摺，然後攤開。</li>
 <li>只沿紅色虛線剪開中間（兩端不要剪斷）。</li>
 <li>再次橫著對摺，兩手捏住左右兩端往中間推，洞會變成菱形。</li>
 <li>繼續推成十字，再同方向摺攏壓平，封面朝上就是一本小書。</li></ol></div>
 <script>
-let b=null;try{b=JSON.parse(localStorage.getItem('rh_book')||'null')}catch(e){}
-const g=document.getElementById('grid');
-if(!b){g.innerHTML='<p style="grid-column:1/-1;padding:20mm">找不到作品，請回到網站重新製作。</p>'}
-else{
- const P={1:b.cover,2:b.pages[0],3:b.pages[1],4:b.pages[2],5:b.pages[3],6:b.pages[4],7:b.pages[5],8:null};
- const ORDER=[[5,1],[4,1],[3,1],[2,1],[6,0],[7,0],[8,0],[1,0]]; // [頁碼, 是否倒轉]
- g.innerHTML=ORDER.map(([n,r])=>`<div class="p ${r?'rot':''}">${n===8?'<div class="back"><b>完</b><span>我的小紅帽故事書</span><i></i><span>作者名字</span></div>':`<img src="${P[n]||''}" alt="第${n}頁">`}</div>`).join('');
+const W=2339,H=1654,K=W/297,M=6*K,PW=71.25*K,PH=99*K,IN=1.5*K;
+const FONT='"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';
+const $=i=>document.getElementById(i),ctx=$('cv').getContext('2d');
+let book=null;try{book=JSON.parse(localStorage.getItem('rh_book')||'null')}catch(e){}
+const load=async u=>{const r=await fetch('/api/img?u='+encodeURIComponent(u));if(!r.ok)throw new Error('img');return createImageBitmap(await r.blob())};
+function cover(img,x,y,w,h){const ar=w/h,ia=img.width/img.height;let sx=0,sy=0,sw=img.width,sh=img.height;
+ if(ia>ar){sw=img.height*ar;sx=(img.width-sw)/2}else{sh=img.width/ar;sy=(img.height-sh)/2}ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h)}
+function makePDF(j,w,h){
+ const enc=new TextEncoder(),parts=[],offs=[];let off=0;
+ const add=x=>{const b=typeof x==='string'?enc.encode(x):x;parts.push(b);off+=b.length};
+ add('%PDF-1.4\n');
+ offs[1]=off;add('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+ offs[2]=off;add('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+ offs[3]=off;add('3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 841.89 595.28] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n');
+ offs[4]=off;add(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${j.length} >>\nstream\n`);add(j);add('\nendstream\nendobj\n');
+ const cs='q 841.89 0 0 595.28 0 0 cm /Im0 Do Q';
+ offs[5]=off;add(`5 0 obj\n<< /Length ${cs.length} >>\nstream\n${cs}\nendstream\nendobj\n`);
+ const x=off;add('xref\n0 6\n0000000000 65535 f \n'+[1,2,3,4,5].map(i=>String(offs[i]).padStart(10,'0')+' 00000 n \n').join(''));
+ add(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`);
+ return new Blob(parts,{type:'application/pdf'});
 }
-function fit(){const s=document.getElementById('sheet');s.style.zoom=Math.min(1,(innerWidth-24)/1123)}
-fit();addEventListener('resize',fit);
+async function main(){
+ if(!book){$('msg').textContent='找不到作品，請回到網站重新製作。';return}
+ const pg=book.pages.map(x=>typeof x==='string'?{image:x,caption:''}:x);
+ const src=[book.cover,...pg.map(x=>x.image)]; // 第1~8頁
+ const imgs=await Promise.all(src.map(u=>u?load(u):null));
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+ const ORDER=[[5,1],[4,1],[3,1],[2,1],[6,0],[7,0],[8,0],[1,0]]; // [頁碼, 是否倒轉]
+ ORDER.forEach(([n,rot],i)=>{
+  const c=i%4,r=Math.floor(i/4),x=M+c*PW,y=M+r*PH;
+  ctx.save();ctx.translate(x+PW/2,y+PH/2);if(rot)ctx.rotate(Math.PI);
+  cover(imgs[n-1],-PW/2+IN,-PH/2+IN,PW-2*IN,PH-2*IN);
+  const cap=n>=2&&pg[n-2]?pg[n-2].caption:'';
+  if(cap){
+   const bw=PW-2*IN,bh=120,bx=-PW/2+IN,by=PH/2-IN-bh;
+   ctx.fillStyle='rgba(252,248,236,.92)';ctx.fillRect(bx,by,bw,bh);
+   ctx.fillStyle='#4a3f35';ctx.font=`500 34px ${FONT}`;ctx.textAlign='center';
+   const per=Math.floor((bw-30)/34),lines=[];for(let i=0;i<cap.length&&lines.length<3;i+=per)lines.push(cap.slice(i,i+per));
+   const y0=by+bh/2-(lines.length-1)*21+11;lines.forEach((t,i)=>ctx.fillText(t,0,y0+i*42));
+  }
+  ctx.restore();
+ });
+ ctx.setLineDash([10,10]);ctx.strokeStyle='#999';ctx.lineWidth=2;ctx.beginPath();
+ for(let c=1;c<4;c++){ctx.moveTo(M+c*PW,M);ctx.lineTo(M+c*PW,H-M)}
+ ctx.moveTo(M,H/2);ctx.lineTo(M+PW,H/2);ctx.moveTo(M+3*PW,H/2);ctx.lineTo(W-M,H/2);ctx.stroke();
+ ctx.setLineDash([22,14]);ctx.strokeStyle='#d91a1a';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(M+PW,H/2);ctx.lineTo(M+3*PW,H/2);ctx.stroke();ctx.setLineDash([]);
+ ctx.fillStyle='#fff';ctx.fillRect(W/2-190,H/2-26,380,52);
+ ctx.fillStyle='#d91a1a';ctx.font=`bold 30px ${FONT}`;ctx.textAlign='center';ctx.fillText('沿紅線剪開（只剪中間兩格）',W/2,H/2+11);
+ $('cv').toBlob(async b=>{
+  const j=new Uint8Array(await b.arrayBuffer());
+  const url=URL.createObjectURL(makePDF(j,W,H));
+  $('pdf').href=url;$('pdf').classList.remove('hide');
+  $('msg').textContent='排好了！按上面的按鈕開啟 PDF，再用「分享 → 列印」（A4，會自動是橫向）。';
+ },'image/jpeg',0.92);
+}
+main().catch(()=>{$('msg').textContent='圖片讀取失敗，請回上一頁再按一次列印。'});
 </script></body></html>
