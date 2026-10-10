@@ -79,6 +79,7 @@ h1{font-size:1.5em;line-height:1.35;margin:.3em 0 .5em;text-align:center}
 @keyframes peel{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
 .curl-t{margin:0 .2em 1.4em 0;font-size:.85em;color:var(--soft);white-space:nowrap;animation:pulse2 1.8s infinite}
 .prevb{position:absolute;left:3.4%;top:2.4%;font-size:.8em;min-height:0;padding:.25em .7em;z-index:2}
+.res h2{font-size:1.25em;margin:0;line-height:1.5}
 .cap.top{margin:0;text-align:left;font-size:1.5em;line-height:1.65;padding:0}
 .cap.top small{display:block;font-size:.5em;color:var(--soft);font-weight:500;margin-bottom:.2em}
 @keyframes pulse2{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
@@ -125,10 +126,21 @@ const Q=[
  {k:'basket',multi:1,t:'水果籃裡有什麼呢？最多三樣喔！',o:[{id:'apple',l:'蘋果',e:'🍎',w:['蘋果']},{id:'bread',l:'麵包',e:'🍞',w:['麵包']},{id:'flower',l:'花',e:'🌸',w:['花']},{id:'cake',l:'蛋糕',e:'🍰',w:['蛋糕']},{id:'berry',l:'草莓',e:'🍓',w:['草莓']},{id:'milk',l:'牛奶',e:'🥛',w:['牛奶']}]}
 ];
 const NODES=[
- {p:3,q:'小紅帽在森林裡遇到大野狼了！這隻大野狼是什麼樣子？牠說了什麼？',c:['一隻害羞的大野狼','一隻戴著帽子的大野狼','一隻肚子餓的大野狼','一隻愛講笑話的大野狼']},
- {p:4,q:'接下來，小紅帽怎麼做呢？',c:['照媽媽的話走大路','去摘漂亮的花','請大野狼一起走','跟著小鳥走']},
- {p:6,q:'外婆家出了狀況！誰來幫忙？怎麼幫忙？',c:['媽媽來幫忙','森林裡的小動物們','小紅帽自己想辦法','獵人叔叔來幫忙']}];
-const INTRO={2:'小紅帽的媽媽把水果籃交給她：「去外婆家吧，記得走大路喔！」',3:'小紅帽走進森林，遇到了一隻大野狼！',4:'森林裡有一條大路，還有一條開滿花的小路。',5:'小紅帽來到外婆家，躺在床上的，好像不是外婆⋯',6:'糟糕！外婆被大野狼嚇壞了，小紅帽大聲喊著救命！',7:'危機解除了，大家慢慢和好，坐下來一起分享點心。',8:'夕陽下，小紅帽開心地走向回家的路。'};
+ {p:3,q:'小朋友，你覺得狼會對小紅帽說什麼呢？',c:['好香的花，可以送我一朵嗎？','小紅帽，你要去哪裡呀？','我肚子好餓喔！','我們來玩遊戲吧！']},
+ {p:4,q:'小朋友，你覺得狼打算怎麼辦呢？',c:['想先跑到奶奶家','想跟小紅帽交朋友','想把食物都吃光光','想躲起來嚇一嚇她']},
+ {p:5,q:'小朋友，你該找誰來幫忙呢？',c:['媽媽','獵人叔叔','森林裡的小動物','外星人朋友']},
+ {p:6,q:'小朋友，你覺得狼和奶奶在做什麼事呢？',c:['開生日派對','一起烤蛋糕','玩捉迷藏','跳舞唱歌']}];
+const TXT={
+ 2:'聽說奶奶身體有一點不舒服，媽媽請我去探望奶奶。\n媽媽說注意安全，路上要小心喔～',
+ 3:'小紅帽來到森林裡面，想要摘一些花朵帶去探望奶奶，突然看見前面走來一隻狼。',
+ 4:'小紅帽給狼一些提籃裡的食物，並告訴他要自己去探望奶奶。\n小紅帽與大野狼道別。',
+ 5:'小紅帽到奶奶家門口，卻發現很不對勁！\n門居然是開著的！',
+ 6:()=>`小紅帽和${said[5]||'朋友'}進到屋子裡，看見了狼和奶奶，卻發現事情和他們想的不一樣……`,
+ 7:()=>`原來狼和奶奶在${said[6]||'玩遊戲'}。\n太好了～大家一起同樂吧！`,
+ 8:'大家開開心心地度過了一天。\n夕陽下，小紅帽輕輕走向回家的路。'};
+const RES={3:a=>`狼對著小紅帽說：「${a}」`,4:a=>`狼心裡想著：${a}`,5:a=>`小紅帽決定：「我要找${a}來幫忙！」`,6:a=>`狼對著小紅帽說：「我們在${a}」`};
+const textFor=p=>{const t=TXT[p];return typeof t==='function'?t():t};
+const capFor=p=>(RES[p]&&said[p])?RES[p](said[p]):({2:'媽媽說注意安全，路上要小心喔～',7:'太好了～大家一起同樂吧！',8:'夕陽下，小紅帽走向回家的路。'}[p]||'');
 const MAXROUNDS=2;
 let mode='design',ans={basket:[]},step=0,talk=false,rec=null,rounds=0,chosen=null,phase='q'; // phase: q|ready|wait|cands
 let book=null,st={},said={},node=0,pending='',cur=1,timer=null,tcur=0,chain=Promise.resolve(),flipping=false,wt=null,srvVer='',lastMode='',lastErr='';
@@ -258,15 +270,17 @@ function paintNx(){
 function paintCap(){
  const C=$('lcap');if(!C)return;const p=cur;
  if(p===1){C.innerHTML=`<div class="big" style="margin:auto 0 .2em">我的小紅帽</div><div class="small" style="font-size:1.1em;margin-bottom:auto">${book.author?'作者：'+esc(book.author):'一個我們一起畫出來的故事'}</div>`;return}
- const hint=st[p]==='ok'?'':st[p]==='fail'?'這一頁沒畫出來，按右邊的「重畫」':st[p]==='busy'?'蠟筆正在畫這一頁⋯':(nodeFor(p)?'回答下面的問題，這一頁就會畫出來':'');
- const txt=st[p]==='ok'?(imgOf(p).caption||INTRO[p]):INTRO[p];
- C.innerHTML=`<div class="cap top"><small>第 ${p} 頁</small>${esc(txt)}</div>${hint?`<div class="small" style="text-align:left;margin-top:.6em">${hint}</div>`:''}`;
+ const hint=mode!=='story'||st[p]==='ok'?'':st[p]==='fail'?'這一頁沒畫出來，按右邊的「重畫」':st[p]==='busy'?'蠟筆正在畫這一頁⋯':(nodeFor(p)?'回答下面的問題，這一頁就會畫出來':'');
+ C.innerHTML=`<div class="cap top"><small>第 ${p} 頁</small>${esc(textFor(p)).replace(/\n/g,'<br>')}</div>${hint?`<div class="small" style="text-align:left;margin-top:.6em">${hint}</div>`:''}`;
 }
 const nodeFor=p=>NODES.find(n=>n.p===p);
 function askHtml(){
- if(mode!=='story'||node>=NODES.length||cur!==NODES[node].p||st[cur]!=='idle')return '';
+ if(mode!=='story'&&mode!=='read')return '';
+ const nd=nodeFor(cur);if(!nd)return '';
+ if(said[cur])return `<div class="ask askbox res"><h2>${esc(RES[cur](said[cur]))}</h2></div>`;
+ if(mode!=='story'||node>=NODES.length||NODES[node].p!==cur||st[cur]!=='idle')return '';
  const n=NODES[node];
- return `<div class="ask"><h2>${n.q}</h2><div class="qc">${n.c.map(c=>`<button data-act="chip">${c}</button>`).join('')}</div>
+ return `<div class="ask askbox"><h2>${n.q}</h2><div class="qc">${n.c.map(c=>`<button data-act="chip">${c}</button>`).join('')}</div>
  <div class="heard" id="said" style="margin:.1em 0">${pending?`我聽到：「${esc(pending)}」`:''}</div>
  <div class="bar"><button class="mic" id="smic" data-act="smic"><span>🎤</span>說話</button><button class="btn say" data-act="sq"><span>👂</span><small>聽問題</small></button><button class="btn go" id="sok" data-act="sok" ${pending?'':'disabled'}>就這樣！</button></div>
  <input id="typed" placeholder="也可以直接打字" value="${esc(pending)}"></div>`;
@@ -297,13 +311,13 @@ function go(n,dir){return turn(()=>spreadHtml(n),dir||(n>=cur?1:-1))}
 async function genPage(p,tryn){
  tryn=tryn||1;
  st[p]='busy';if(cur===p){paintImg();paintCap()}
- const hist=book.pages.slice(0,p-2).map((x,i)=>x&&{p:i+2,caption:x.caption,cast:x.cast}).filter(Boolean);
+ const hist=book.pages.slice(0,p-2).map((x,i)=>x&&{p:i+2,caption:textFor(i+2),said:said[i+2]||'',cast:x.cast}).filter(Boolean);
  try{
   let r=await fetch('/api/page',{method:'POST',headers:hdr(),body:JSON.stringify({image:book.cover,page:p,said:said[p]||'',history:hist})});
   if(r.status===401){const c=prompt('請輸入展場通行碼');if(c){sessionStorage.setItem('code',c.trim());r=await fetch('/api/page',{method:'POST',headers:hdr(),body:JSON.stringify({image:book.cover,page:p,said:said[p]||'',history:hist})})}}
   const d=await readJson(r);
   if(!r.ok||!d.image)throw new Error((d.error||'失敗')+(d.detail?' '+JSON.stringify(d.detail).slice(0,300):''));
-  book.pages[p-2]={image:d.image,caption:d.caption,cast:d.cast};st[p]='ok';
+  book.pages[p-2]={image:d.image,caption:capFor(p),cast:d.cast};st[p]='ok';
   if(d.mode!=='fixed'){lastMode=d.mode;lastErr=d.gerr||''}
   localStorage.setItem('rh_book',JSON.stringify(book));
  }catch(e){
@@ -325,12 +339,11 @@ function startStory(){
 }
 function setSaid(t){pending=t.trim();const s=$('said');if(s)s.textContent=pending?`我聽到：「${pending}」`:'';const k=$('sok');if(k)k.disabled=!pending;const i=$('typed');if(i&&i.value!==pending&&document.activeElement!==i)i.value=pending}
 function answer(){
- if(!pending)return;const n=NODES[node];said[n.p]=pending;queue(n.p);
- if(n.p===4)queue(5);
- if(n.p===6){queue(7);queue(8)}
+ if(!pending)return;const n=NODES[node];said[n.p]=pending;
+ if(n.p===6){said[7]=pending;queue(6);queue(7);queue(8)}else queue(n.p);
  node++;pending='';
- const L=$('L'),a=L.querySelector('.ask');if(a){a.outerHTML=askHtml()}
- if(cur>=2&&cur<=8){paintImg();paintCap()}
+ const a=$('L').querySelector('.askbox');if(a)a.outerHTML=askHtml();
+ paintCap();paintImg();
  if(node<NODES.length)say(NODES[node].q);
 }
 
@@ -383,7 +396,7 @@ const A={
  sok:()=>answer(),
  sq:()=>{talk=true;if(node<NODES.length)say(NODES[node].q)},
  retry:b=>{const p=+b.dataset.p;st[p]='busy';paintImg();chain=chain.then(()=>genPage(p))},
- stnext:()=>{if(!flipping&&mode==='story')go(cur+1,1)},stprev:()=>{if(!flipping&&mode==='story')go(cur-1,-1)},bookgo:()=>{if(mode==='story'&&allDone())finale()},
+ stnext:()=>{if(!flipping&&mode==='story')go(cur+1,1).then(()=>{const n=NODES[node];if(n&&n.p===cur&&st[cur]==='idle')say(n.q)})},stprev:()=>{if(!flipping&&mode==='story')go(cur-1,-1)},bookgo:()=>{if(mode==='story'&&allDone())finale()},
  nextp:()=>nav(cur+1),prevp:()=>nav(cur-1),lastp:()=>nav(9),
  nmic:()=>listen('nmic','nhint',nameHeard),
  nameok:()=>nameDone(),
