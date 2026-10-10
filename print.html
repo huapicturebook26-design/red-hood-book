@@ -22,7 +22,7 @@ const W=2339,H=1654,K=W/297,M=6*K,PW=71.25*K,PH=99*K,IN=1.5*K;
 const FONT='"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';
 const $=i=>document.getElementById(i),ctx=$('cv').getContext('2d');
 let book=null;try{book=JSON.parse(localStorage.getItem('rh_book')||'null')}catch(e){}
-const load=async u=>{const r=await fetch('/api/page?u='+encodeURIComponent(u));if(!r.ok)throw new Error('HTTP '+r.status);return createImageBitmap(await r.blob())};
+const load=async u=>{const r=await fetch('/api/draw?u='+encodeURIComponent(u));if(!r.ok)throw new Error('HTTP '+r.status);return createImageBitmap(await r.blob())};
 function cover(img,x,y,w,h){const ar=w/h,ia=img.width/img.height;let sx=0,sy=0,sw=img.width,sh=img.height;
  if(ia>ar){sw=img.height*ar;sx=(img.width-sw)/2}else{sh=img.width/ar;sy=(img.height-sh)/2}ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h)}
 function makePDF(j,w,h){
@@ -75,5 +75,5 @@ async function main(){
   $('msg').textContent='排好了！按上面的按鈕開啟 PDF，再用「分享 → 列印」（A4，會自動是橫向）。';
  },'image/jpeg',0.92);
 }
-main().catch(e=>{$('msg').textContent='圖片讀取失敗（'+(e&&e.message)+'）。這代表伺服器上的 api/page.js 還是舊版，請重新貼上最新的 page.js。'});
+main().catch(e=>{$('msg').textContent='圖片讀取失敗（'+(e&&e.message)+'）。這代表伺服器上的 還沒有 api/draw.js，請先上傳 draw.js。'});
 </script></body></html>
