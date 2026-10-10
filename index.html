@@ -69,7 +69,18 @@ h1{font-size:1.5em;line-height:1.35;margin:.3em 0 .5em;text-align:center}
 .side .btn{font-size:1.1em}.qr{border:.15em dashed var(--line);border-radius:1em;padding:.8em;color:var(--soft);font-size:.9em}
 #rot{display:none;position:fixed;inset:0;z-index:20;background:var(--bg);align-items:center;justify-content:center;font-size:24px;text-align:center}
 @media (orientation:portrait){#rot{display:flex}}
-.nx{position:absolute;right:5%;bottom:5%;display:flex;gap:.6em;align-items:center;z-index:2}.nx .btn{font-size:1.05em;box-shadow:0 .2em 0 rgba(0,0,0,.18);background-clip:padding-box}.nx .btn:not(.go){background:var(--paper)}.nx .bookgo{font-size:1.25em;padding:.6em 1.1em;animation:pulse2 1.6s infinite}
+.nx{position:absolute;right:0;bottom:0;display:flex;align-items:flex-end;z-index:3}
+.nx .bookgo{margin:0 1.2em 1.2em 0;font-size:1.25em;padding:.6em 1.1em;box-shadow:0 .25em 0 rgba(0,0,0,.2);animation:pulse2 1.6s infinite}
+.nx .wait{margin:0 1.2em 1.2em 0;background:var(--paper);padding:.3em .7em;border-radius:1em}
+.curl{position:relative;width:6em;height:6em;padding:0;border:0;background:none;cursor:pointer;filter:drop-shadow(-.25em -.25em .35em rgba(0,0,0,.35));transition:transform .25s;transform-origin:100% 100%;animation:peel 1.8s ease-in-out infinite}
+.curl:hover,.curl:active{transform:scale(1.25);animation:none}
+.curl .under{position:absolute;inset:0;background:#e9e3cf;clip-path:polygon(100% 0,0 100%,100% 100%)}
+.curl .flap{position:absolute;inset:0;background:linear-gradient(135deg,#fffdf6 0%,#f3eedd 45%,#cdc5aa 100%);clip-path:polygon(100% 0,0 100%,0 0)}
+@keyframes peel{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+.curl-t{margin:0 .2em 1.4em 0;font-size:.85em;color:var(--soft);white-space:nowrap;animation:pulse2 1.8s infinite}
+.prevb{position:absolute;left:3.4%;top:2.4%;font-size:.8em;min-height:0;padding:.25em .7em;z-index:2}
+.cap.top{margin:0;text-align:left;font-size:1.5em;line-height:1.65;padding:0}
+.cap.top small{display:block;font-size:.5em;color:var(--soft);font-weight:500;margin-bottom:.2em}
 @keyframes pulse2{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
 .intro{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1em;z-index:10;cursor:pointer}
 #introT{font-size:7em;font-weight:800;letter-spacing:.2em;padding-left:.2em;color:#b4483d;opacity:0;transition:opacity 1.6s,transform 1.4s cubic-bezier(.5,0,.2,1)}
@@ -117,6 +128,7 @@ const NODES=[
  {p:3,q:'小紅帽在森林裡遇到大野狼了！這隻大野狼是什麼樣子？牠說了什麼？',c:['一隻害羞的大野狼','一隻戴著帽子的大野狼','一隻肚子餓的大野狼','一隻愛講笑話的大野狼']},
  {p:4,q:'接下來，小紅帽怎麼做呢？',c:['照媽媽的話走大路','去摘漂亮的花','請大野狼一起走','跟著小鳥走']},
  {p:6,q:'外婆家出了狀況！誰來幫忙？怎麼幫忙？',c:['媽媽來幫忙','森林裡的小動物們','小紅帽自己想辦法','獵人叔叔來幫忙']}];
+const INTRO={2:'小紅帽的媽媽把水果籃交給她：「去外婆家吧，記得走大路喔！」',3:'小紅帽走進森林，遇到了一隻大野狼！',4:'森林裡有一條大路，還有一條開滿花的小路。',5:'小紅帽來到外婆家，躺在床上的，好像不是外婆⋯',6:'糟糕！外婆被大野狼嚇壞了，小紅帽大聲喊著救命！',7:'危機解除了，大家慢慢和好，坐下來一起分享點心。',8:'夕陽下，小紅帽開心地走向回家的路。'};
 const MAXROUNDS=2;
 let mode='design',ans={basket:[]},step=0,talk=false,rec=null,rounds=0,chosen=null,phase='q'; // phase: q|ready|wait|cands
 let book=null,st={},said={},node=0,pending='',cur=1,timer=null,tcur=0,chain=Promise.resolve(),flipping=false,wt=null,srvVer='',lastMode='',lastErr='';
@@ -209,6 +221,7 @@ function listen(btnId,hintId,cb){
  rec.onend=()=>{rec=null;const b=$(btnId);if(b)b.classList.remove('on')};
  try{rec.start()}catch(_){rec=null;$(btnId).classList.remove('on')}
 }
+async function readJson(r){const t=await r.text();try{return JSON.parse(t)}catch(_){return {error:'伺服器回應 HTTP '+r.status+'：'+t.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').slice(0,120)}}}
 const hdr=()=>({'Content-Type':'application/json','x-access-code':sessionStorage.getItem('code')||''});
 async function genChar(){
  rounds++;chosen=null;phase='wait';paintDesign();
@@ -216,7 +229,7 @@ async function genChar(){
  try{
   let r=await fetch('/api/character',{method:'POST',headers:hdr(),body:JSON.stringify(ans)});
   if(r.status===401){const c=prompt('請輸入展場通行碼');if(c){sessionStorage.setItem('code',c.trim());r=await fetch('/api/character',{method:'POST',headers:hdr(),body:JSON.stringify(ans)})}}
-  const d=await r.json().catch(()=>({}));
+  const d=await readJson(r);
   if(!r.ok||!d.images)throw new Error(d.error||(r.status===401?'通行碼不對':'沒畫出來'));
   clearInterval(wt);window.cands=d.images;phase='cands';paintDesign();
  }catch(e){clearInterval(wt);rounds--;phase='ready';paintDesign();dbg('失敗：'+e.message);const x=$('err');if(x)x.textContent=e.message}
@@ -231,26 +244,27 @@ function paintImg(){
  if(st[p]==='ok')R.innerHTML=`<img src="${esc(imgOf(p).image)}" alt="第${p}頁">`;
  else if(st[p]==='fail')R.innerHTML=`<div><div style="font-size:2em">😢</div><button class="btn go" data-act="retry" data-p="${p}">重畫這一頁</button></div>`;
  else if(st[p]==='busy')R.innerHTML=`<div><div style="font-size:3em">🖍️</div>蠟筆正在畫第 ${p} 頁⋯</div>`;
- else R.innerHTML=`<div><div style="font-size:3em">💭</div>等你說出點子，<br>這一頁才畫得出來喔</div>`;
+ else R.innerHTML=`<div><div style="font-size:3em">💭</div>${nodeFor(p)?'等你說出點子，<br>這一頁才畫得出來喔':'等一下下⋯'}</div>`;
 }
 function paintNx(){
  const e=$('rnx');if(!e)return;if(mode!=='story'){e.innerHTML='';return}
  const p=cur;let h='';
  if(p===1||st[p]==='ok'){
-  if(p>1)h+='<button class="btn" data-act="stprev">‹ 上一頁</button>';
-  if(p<8)h+='<button class="btn go" data-act="stnext">下一頁 ›</button>';
-  else h+=allDone()?'<button class="btn go bookgo" data-act="bookgo">📖 我的小紅帽繪本</button>':'<span class="small" style="background:var(--paper);padding:.3em .6em;border-radius:1em">其他頁還在畫，請稍等⋯</span>';
- }else if(p>1)h='<button class="btn" data-act="stprev">‹ 上一頁</button>';
+  if(p<8)h='<span class="curl-t">翻到下一頁</span><button class="curl" data-act="stnext" aria-label="下一頁"><span class="under"></span><span class="flap"></span></button>';
+  else h=allDone()?'<button class="btn go bookgo" data-act="bookgo">📖 我的小紅帽繪本</button>':'<span class="small wait">其他頁還在畫，請稍等⋯</span>';
+ }
  e.innerHTML=h;
 }
 function paintCap(){
  const C=$('lcap');if(!C)return;const p=cur;
- if(p===1)C.innerHTML=`<div class="big">我的小紅帽</div><div class="small" style="font-size:1.1em">${book.author?'作者：'+esc(book.author):'一個我們一起畫出來的故事'}</div>`;
- else if(st[p]==='ok')C.innerHTML=`<div class="cap">${esc(imgOf(p).caption||'')}</div>`;
- else C.innerHTML=`<div class="cap" style="color:var(--soft);font-weight:500">${st[p]==='fail'?'這一頁沒畫出來':st[p]==='busy'?'故事正在變出來⋯':'故事等著你的點子⋯'}</div>`;
+ if(p===1){C.innerHTML=`<div class="big" style="margin:auto 0 .2em">我的小紅帽</div><div class="small" style="font-size:1.1em;margin-bottom:auto">${book.author?'作者：'+esc(book.author):'一個我們一起畫出來的故事'}</div>`;return}
+ const hint=st[p]==='ok'?'':st[p]==='fail'?'這一頁沒畫出來，按右邊的「重畫」':st[p]==='busy'?'蠟筆正在畫這一頁⋯':(nodeFor(p)?'回答下面的問題，這一頁就會畫出來':'');
+ const txt=st[p]==='ok'?(imgOf(p).caption||INTRO[p]):INTRO[p];
+ C.innerHTML=`<div class="cap top"><small>第 ${p} 頁</small>${esc(txt)}</div>${hint?`<div class="small" style="text-align:left;margin-top:.6em">${hint}</div>`:''}`;
 }
+const nodeFor=p=>NODES.find(n=>n.p===p);
 function askHtml(){
- if(mode!=='story'||node>=NODES.length)return '';
+ if(mode!=='story'||node>=NODES.length||cur!==NODES[node].p||st[cur]!=='idle')return '';
  const n=NODES[node];
  return `<div class="ask"><h2>${n.q}</h2><div class="qc">${n.c.map(c=>`<button data-act="chip">${c}</button>`).join('')}</div>
  <div class="heard" id="said" style="margin:.1em 0">${pending?`我聽到：「${esc(pending)}」`:''}</div>
@@ -275,23 +289,26 @@ function spreadHtml(n){
   return;
  }
  $('R').className='pg R';
- $('L').innerHTML=`<div id="lcap" style="flex:1;display:flex;flex-direction:column;min-height:0"></div>${askHtml()}<div class="small" id="stat" style="margin-top:.3em"></div>`;
+ $('L').innerHTML=`${mode==='story'&&n>1?'<button class="btn prevb" data-act="stprev">‹ 上一頁</button>':''}<div id="lcap" style="flex:1;display:flex;flex-direction:column;min-height:0;padding-top:1.4em"></div>${askHtml()}<div class="small" id="stat" style="margin-top:.3em"></div>`;
  $('R').innerHTML=`<div class="fig" id="rimg"></div><div class="nx" id="rnx"></div>`;$('R').dataset.v='story';
  paintCap();paintImg();paintStat();paintNx();
 }
 function go(n,dir){return turn(()=>spreadHtml(n),dir||(n>=cur?1:-1))}
-async function genPage(p){
+async function genPage(p,tryn){
+ tryn=tryn||1;
  st[p]='busy';if(cur===p){paintImg();paintCap()}
  const hist=book.pages.slice(0,p-2).map((x,i)=>x&&{p:i+2,caption:x.caption,cast:x.cast}).filter(Boolean);
  try{
   let r=await fetch('/api/page',{method:'POST',headers:hdr(),body:JSON.stringify({image:book.cover,page:p,said:said[p]||'',history:hist})});
   if(r.status===401){const c=prompt('請輸入展場通行碼');if(c){sessionStorage.setItem('code',c.trim());r=await fetch('/api/page',{method:'POST',headers:hdr(),body:JSON.stringify({image:book.cover,page:p,said:said[p]||'',history:hist})})}}
-  const d=await r.json().catch(()=>({}));
+  const d=await readJson(r);
   if(!r.ok||!d.image)throw new Error((d.error||'失敗')+(d.detail?' '+JSON.stringify(d.detail).slice(0,300):''));
   book.pages[p-2]={image:d.image,caption:d.caption,cast:d.cast};st[p]='ok';
   if(d.mode!=='fixed'){lastMode=d.mode;lastErr=d.gerr||''}
   localStorage.setItem('rh_book',JSON.stringify(book));
- }catch(e){st[p]='fail';dbg('第'+p+'頁失敗：'+e.message)}
+ }catch(e){
+  if(tryn<2&&!/通行碼/.test(e.message))return genPage(p,2);
+  st[p]='fail';dbg('第'+p+'頁失敗：'+e.message)}
  if(cur===p){paintImg();paintCap()}
  paintStat();paintNx();
 }
