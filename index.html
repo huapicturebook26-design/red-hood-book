@@ -69,13 +69,19 @@ h1{font-size:1.5em;line-height:1.35;margin:.3em 0 .5em;text-align:center}
 .side .btn{font-size:1.1em}.qr{border:.15em dashed var(--line);border-radius:1em;padding:.8em;color:var(--soft);font-size:.9em}
 #rot{display:none;position:fixed;inset:0;z-index:20;background:var(--bg);align-items:center;justify-content:center;font-size:24px;text-align:center}
 @media (orientation:portrait){#rot{display:flex}}
+.nx{position:absolute;right:5%;bottom:5%;display:flex;gap:.6em;align-items:center;z-index:2}.nx .btn{font-size:1.05em;box-shadow:0 .2em 0 rgba(0,0,0,.18);background-clip:padding-box}.nx .btn:not(.go){background:var(--paper)}.nx .bookgo{font-size:1.25em;padding:.6em 1.1em;animation:pulse2 1.6s infinite}
+@keyframes pulse2{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.intro{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1em;z-index:10;cursor:pointer}
+#introT{font-size:7em;font-weight:800;letter-spacing:.2em;padding-left:.2em;color:#b4483d;opacity:0;transition:opacity 1.6s,transform 1.4s cubic-bezier(.5,0,.2,1)}
+.intro.show #introT{opacity:1}.intro.shrink #introT{transform:scale(.2);opacity:0}.intro.shrink .small{opacity:0}.intro .small{transition:opacity .6s}.intro.gone{display:none}
 .hide{display:none!important}
 </style>
 </head>
 <body>
 <div id="rot">📱↻<br>請把平板橫過來，<br>像打開一本書一樣</div>
 <div class="stage" id="stage">
-  <div class="bk" id="bk">
+  <div class="intro" id="intro"><div id="introT">小紅帽</div><div class="small">點一下可以跳過</div></div>
+  <div class="bk shrunk" id="bk">
     <div class="book" id="book">
       <div class="pg L" id="L"></div><div class="pg R" id="R"></div>
       <div class="leaf" id="leaf"><div class="f pg front"></div><div class="f pg back"></div></div>
@@ -160,7 +166,7 @@ function paintDesign(quiet){
    <button class="mic" id="mic" data-act="mic"><span>🎤</span>說話</button>
    <button class="btn say" data-act="sayq"><span>👂</span><small>聽問題</small></button>
    <button class="btn go" data-act="next" ${q.multi||ans[q.k]?'':'disabled'}>${step===Q.length-1?'完成 ✓':'下一題 ›'}</button></div>`;
-  R=`<div class="fig"><img src="${esc(window.heroSrc||'base-girl.jpg')}" alt="小紅帽" onerror="this.onerror=null;this.src='base-girl.JPG'"></div><div class="chips">${chipsHtml()}</div>`;
+  R=`<div class="fig"><img src="base-girl.jpg" alt="小紅帽" onerror="this.onerror=null;this.src='base-girl.JPG'"></div>`;
  }else if(phase==='ready'){
   L=`${dots}<h1>準備好了嗎？</h1><p style="text-align:center;font-size:1.1em">都選好了！按下去，<br>小紅帽就會出現囉。</p><div id="err" class="small"></div>
    <div class="bar" style="justify-content:center;gap:1em"><button class="btn" data-act="back2">‹ 回去改</button><button class="btn go" data-act="send">畫我的小紅帽 ✨</button></div>`;
@@ -173,7 +179,8 @@ function paintDesign(quiet){
    <div class="bar" style="justify-content:center;gap:1em"><button class="btn ${rounds>=MAXROUNDS?'hide':''}" data-act="again">再畫一次</button><button class="btn go" id="done" data-act="done" ${chosen?'':'disabled'}>就是她！</button></div>`;
   R=`<div class="cands">${window.cands.map(u=>`<img src="${esc(u)}" alt="小紅帽" data-act="pick" data-u="${esc(u)}" class="${u===chosen?'pick':''}">`).join('')}</div>`;
  }
- $('L').innerHTML=L;$('R').innerHTML=R;
+ $('L').innerHTML=L;
+ if(phase!=='q'||$('R').dataset.v!=='hero'){$('R').innerHTML=R;$('R').dataset.v=phase==='q'?'hero':phase}
  if(phase==='q'&&!quiet)say(Q[step].t);
 }
 function goStep(n){phase='q';step=Math.max(0,Math.min(Q.length,n));if(step>=Q.length){phase='ready';say('都選好了！按下去，小紅帽就會出現囉。')}paintDesign()}
@@ -226,6 +233,16 @@ function paintImg(){
  else if(st[p]==='busy')R.innerHTML=`<div><div style="font-size:3em">🖍️</div>蠟筆正在畫第 ${p} 頁⋯</div>`;
  else R.innerHTML=`<div><div style="font-size:3em">💭</div>等你說出點子，<br>這一頁才畫得出來喔</div>`;
 }
+function paintNx(){
+ const e=$('rnx');if(!e)return;if(mode!=='story'){e.innerHTML='';return}
+ const p=cur;let h='';
+ if(p===1||st[p]==='ok'){
+  if(p>1)h+='<button class="btn" data-act="stprev">‹ 上一頁</button>';
+  if(p<8)h+='<button class="btn go" data-act="stnext">下一頁 ›</button>';
+  else h+=allDone()?'<button class="btn go bookgo" data-act="bookgo">📖 我的小紅帽繪本</button>':'<span class="small" style="background:var(--paper);padding:.3em .6em;border-radius:1em">其他頁還在畫，請稍等⋯</span>';
+ }else if(p>1)h='<button class="btn" data-act="stprev">‹ 上一頁</button>';
+ e.innerHTML=h;
+}
 function paintCap(){
  const C=$('lcap');if(!C)return;const p=cur;
  if(p===1)C.innerHTML=`<div class="big">我的小紅帽</div><div class="small" style="font-size:1.1em">${book.author?'作者：'+esc(book.author):'一個我們一起畫出來的故事'}</div>`;
@@ -259,21 +276,10 @@ function spreadHtml(n){
  }
  $('R').className='pg R';
  $('L').innerHTML=`<div id="lcap" style="flex:1;display:flex;flex-direction:column;min-height:0"></div>${askHtml()}<div class="small" id="stat" style="margin-top:.3em"></div>`;
- $('R').innerHTML=`<div class="fig" id="rimg"></div>`;
- paintCap();paintImg();paintStat();
+ $('R').innerHTML=`<div class="fig" id="rimg"></div><div class="nx" id="rnx"></div>`;$('R').dataset.v='story';
+ paintCap();paintImg();paintStat();paintNx();
 }
-function go(n,dir){
- clearTimeout(timer);timer=null;
- return turn(()=>spreadHtml(n),dir||(n>=cur?1:-1)).then(()=>{if(mode==='story')tick()});
-}
-function tick(){
- if(mode!=='story')return;
- const rdy=cur===1||st[cur]==='ok';if(!rdy)return;
- if(timer&&tcur===cur)return;
- clearTimeout(timer);tcur=cur;
- if(cur<8)timer=setTimeout(()=>{timer=null;if(mode==='story')go(cur+1,1)},5000*TM());
- else timer=setTimeout(()=>{timer=null;if(mode==='story'&&allDone())finale();else tick()},5000*TM());
-}
+function go(n,dir){return turn(()=>spreadHtml(n),dir||(n>=cur?1:-1))}
 async function genPage(p){
  st[p]='busy';if(cur===p){paintImg();paintCap()}
  const hist=book.pages.slice(0,p-2).map((x,i)=>x&&{p:i+2,caption:x.caption,cast:x.cast}).filter(Boolean);
@@ -287,7 +293,7 @@ async function genPage(p){
   localStorage.setItem('rh_book',JSON.stringify(book));
  }catch(e){st[p]='fail';dbg('第'+p+'頁失敗：'+e.message)}
  if(cur===p){paintImg();paintCap()}
- paintStat();tick();
+ paintStat();paintNx();
 }
 const queue=p=>{st[p]='busy';chain=chain.then(()=>genPage(p))};
 function startStory(){
@@ -297,7 +303,7 @@ function startStory(){
  $('mimg').src=chosen;
  for(let p=3;p<=8;p++)st[p]='idle';
  queue(2);
- turn(()=>spreadHtml(1),1).then(tick);
+ turn(()=>spreadHtml(1),1);
  say('這是你的小紅帽！我們一起來編故事吧。');
 }
 function setSaid(t){pending=t.trim();const s=$('said');if(s)s.textContent=pending?`我聽到：「${pending}」`:'';const k=$('sok');if(k)k.disabled=!pending;const i=$('typed');if(i&&i.value!==pending&&document.activeElement!==i)i.value=pending}
@@ -313,7 +319,7 @@ function answer(){
 
 /* ---------- 完成：小書 ---------- */
 async function finale(){
- mode='cover';clearTimeout(timer);
+ mode='cover';
  $('ma').textContent='';$('bk').classList.add('shrunk');$('mini').className='mini on';
  say('你的故事書完成了！');
  await sleep(2400*TM());
@@ -360,6 +366,7 @@ const A={
  sok:()=>answer(),
  sq:()=>{talk=true;if(node<NODES.length)say(NODES[node].q)},
  retry:b=>{const p=+b.dataset.p;st[p]='busy';paintImg();chain=chain.then(()=>genPage(p))},
+ stnext:()=>{if(!flipping&&mode==='story')go(cur+1,1)},stprev:()=>{if(!flipping&&mode==='story')go(cur-1,-1)},bookgo:()=>{if(mode==='story'&&allDone())finale()},
  nextp:()=>nav(cur+1),prevp:()=>nav(cur-1),lastp:()=>nav(9),
  nmic:()=>listen('nmic','nhint',nameHeard),
  nameok:()=>nameDone(),
@@ -370,6 +377,17 @@ const A={
 document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(b&&A[b.dataset.act])try{A[b.dataset.act](b)}catch(err){dbg('按鈕錯誤：'+err.message)}});
 document.addEventListener('input',e=>{if(e.target.id==='typed')setSaid(e.target.value)});
 paintDesign();
+let skip=false;
+const wait=ms=>new Promise(r=>{const t=setTimeout(done,ms*TM()),iv=setInterval(()=>{if(skip)done()},80);function done(){clearTimeout(t);clearInterval(iv);r()}});
+async function intro(){
+ const I=$('intro');I.addEventListener('click',()=>{skip=true;talk=true});
+ $('mimg').src='base-girl.jpg';
+ await wait(300);I.classList.add('show');await wait(2300);
+ I.classList.add('shrink');$('mini').className='mini on';await wait(2000);
+ $('mini').classList.add('opening');$('bk').classList.remove('shrunk');I.classList.add('gone');await wait(1500);
+ $('mini').className='mini';
+}
+intro();
 </script>
 </body>
 </html>
