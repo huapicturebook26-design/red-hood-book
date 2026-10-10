@@ -50,12 +50,13 @@ async function main(){
   const c=i%4,r=Math.floor(i/4),x=M+c*PW,y=M+r*PH;
   ctx.save();ctx.translate(x+PW/2,y+PH/2);if(rot)ctx.rotate(Math.PI);
   cover(imgs[n-1],-PW/2+IN,-PH/2+IN,PW-2*IN,PH-2*IN);
-  const cap=n>=2&&pg[n-2]?pg[n-2].caption:'';
+  let cap=n>=2&&pg[n-2]?pg[n-2].caption:'';
+  if(n===1)cap='我的小紅帽'+(book.author?'\n作者：'+book.author:'');
   if(cap){
    const bw=PW-2*IN,bh=120,bx=-PW/2+IN,by=PH/2-IN-bh;
    ctx.fillStyle='rgba(252,248,236,.92)';ctx.fillRect(bx,by,bw,bh);
    ctx.fillStyle='#4a3f35';ctx.font=`500 34px ${FONT}`;ctx.textAlign='center';
-   const per=Math.floor((bw-30)/34),lines=[];for(let i=0;i<cap.length&&lines.length<3;i+=per)lines.push(cap.slice(i,i+per));
+   const per=Math.floor((bw-30)/34),lines=[];cap.split('\n').forEach(seg=>{for(let i=0;i<seg.length&&lines.length<3;i+=per)lines.push(seg.slice(i,i+per))});
    const y0=by+bh/2-(lines.length-1)*21+11;lines.forEach((t,i)=>ctx.fillText(t,0,y0+i*42));
   }
   ctx.restore();
@@ -70,6 +71,7 @@ async function main(){
   const j=new Uint8Array(await b.arrayBuffer());
   const url=URL.createObjectURL(makePDF(j,W,H));
   $('pdf').href=url;$('pdf').classList.remove('hide');
+  if(/dl=1/.test(location.search)){$('pdf').download='我的小紅帽'+(book.author?'-'+book.author:'')+'.pdf';$('pdf').textContent='⬇ 下載 PDF';setTimeout(()=>$('pdf').click(),300)}
   $('msg').textContent='排好了！按上面的按鈕開啟 PDF，再用「分享 → 列印」（A4，會自動是橫向）。';
  },'image/jpeg',0.92);
 }
