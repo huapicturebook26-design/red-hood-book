@@ -1,6 +1,6 @@
 // 故事頁生成：Gemini（或備用的 MyMemory）把孩子的話織進小紅帽的故事框架，再由 Kontext 用同一個角色畫出這一頁
 // 另外：GET /api/page?u=圖片網址 兼任圖片代理，供列印頁使用（不需要另外的 img.js）
-const VERSION = 'draw.js v23';
+const VERSION = 'draw.js v24';
 const FAL_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const FAL_MULTI = 'https://fal.run/fal-ai/flux-pro/kontext/multi';
 const MODELS = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))];
@@ -11,7 +11,7 @@ const okHost = (u) => { try { const x = new URL(u); return x.protocol === 'https
 const MOTHER = "the child's mother, a tall adult woman with brown hair in a bun, wearing a green dress and a white apron, no hood";
 const GRANDMA = 'the grandmother, a small elderly woman with white hair in a bun, round glasses, a gray shawl and a purple dress, no hood';
 const HUNTER = 'a kind hunter, a tall adult man with a brown beard, a green hat and a brown coat';
-const WOLF = 'an anthropomorphic gray wolf character who stands and walks upright like a person on two legs, with exactly two arms and two paw-like hands, a friendly wolf face with pointed ears and a muzzle, soft gray fur, a fluffy bushy tail, wearing a simple brown vest';
+const WOLF = 'a wolf character with a human-like body: stands fully upright on two legs like a person with human body proportions, exactly two arms with human-like hands that can do any human activity, a friendly wolf face with pointed ears and a muzzle, soft gray fur, a fluffy bushy tail, wearing a simple brown vest';
 
 // 每一頁「一定要發生的事」（依作者的腳本）
 const SPEC = {
@@ -264,7 +264,7 @@ module.exports = async (req, res) => {
       (chars.length
         ? `Add only ${chars.join('; ')} as other characters, each clearly visible and clearly different from the child, with no red hood, and nobody else. `
         : 'No other characters. ') +
-      `Every character has exactly two arms, two hands and two legs, no extra limbs. Same crayon drawing style, no text, no letters, no speech bubbles, no thought bubbles.`;
+      `Any wolf is drawn as an upright person-like figure standing on two legs like a human (wolf head, fur and fluffy tail, human posture and human-like hands), never on all fours. All hands are clearly drawn with five distinct, sharp, well-defined fingers and clean line work, never blurry. Every character has exactly two arms, two hands and two legs, no extra limbs. Same crayon drawing style, no text, no letters, no speech bubbles, no thought bubbles.`;
     const callFal = async (p, tol, useRefs = true) => {
       const body = { prompt: p, aspect_ratio: '3:4', output_format: 'jpeg', ...(tol ? { safety_tolerance: tol } : {}) };
       const m = useRefs && multi;
@@ -304,6 +304,7 @@ module.exports = async (req, res) => {
     if (flagged(fr) || (bytes >= 0 && bytes < 25000)) return res.status(502).json({ error: '這張圖被安全檢查擋下來了（黑圖），請按「重畫這一頁」', mode, gerr, bytes });
     const image = fr && fr.images && fr.images[0] && fr.images[0].url;
     if (!image) {
+      if (fstatus === 403 && /TOP_UP|locked/i.test(JSON.stringify(fr))) return res.status(502).json({ error: '畫圖額度用完了，請通知工作人員補充額度', mode, gerr });
       const why = typeof fr.detail === 'string' ? fr.detail : JSON.stringify(fr.detail || fr.raw || fr).slice(0, 200);
       return res.status(502).json({ error: '畫圖服務回應 ' + fstatus + '：' + clip(why, 160), mode, gerr });
     }
