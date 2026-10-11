@@ -1,6 +1,6 @@
 // 故事頁生成：Gemini（或備用的 MyMemory）把孩子的話織進小紅帽的故事框架，再由 Kontext 用同一個角色畫出這一頁
 // 另外：GET /api/page?u=圖片網址 兼任圖片代理，供列印頁使用（不需要另外的 img.js）
-const VERSION = 'draw.js v14';
+const VERSION = 'draw.js v15';
 const FAL_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const MODELS = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))];
 const OKHOST = ['fal.media', 'fal.run', 'fal.ai'];
@@ -100,8 +100,7 @@ async function viaClaude(userMsg) {
     body: JSON.stringify({
       model: process.env.CLAUDE_MODEL || 'claude-haiku-5-5',
       max_tokens: 500,
-      temperature: 0.7,
-      system: SYSTEM + ' Reply with one JSON object only.',
+      system: SYSTEM + ' Also include slot_zh: only for page 5, the helper the child chose as a short Traditional Chinese noun phrase with no verbs (e.g. 太陽跟月亮, 一隻恐龍); only for pages 6 and 7, the activity as a short Traditional Chinese verb phrase that fits right after 「狼和奶奶在」 (e.g. 畫萬聖節的南瓜、開萬聖節派對); gently fix obvious speech-recognition homophone mistakes; empty string for other pages. Reply with one JSON object only.',
       messages: [{ role: 'user', content: userMsg }, { role: 'assistant', content: '{' }],
     }),
   }).then((x) => x.json());
@@ -230,7 +229,7 @@ module.exports = async (req, res) => {
       const why = typeof fr.detail === 'string' ? fr.detail : JSON.stringify(fr.detail || fr.raw || fr).slice(0, 200);
       return res.status(502).json({ error: '畫圖服務回應 ' + fstatus + '：' + clip(why, 160), mode, gerr });
     }
-    return res.status(200).json({ image, mode, gerr: mode === 'gemini' ? '' : gerr, caption: clip(sc.caption_zh, 40), cast: chars });
+    return res.status(200).json({ image, mode, gerr: mode === 'gemini' ? '' : gerr, caption: clip(sc.caption_zh, 40), slot: clip(sc.slot_zh, 40), cast: chars });
   } catch (e) {
     return res.status(500).json({ error: '生成時發生錯誤：' + e.message });
   }
