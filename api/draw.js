@@ -1,6 +1,6 @@
 // 故事頁生成：Gemini（或備用的 MyMemory）把孩子的話織進小紅帽的故事框架，再由 Kontext 用同一個角色畫出這一頁
 // 另外：GET /api/page?u=圖片網址 兼任圖片代理，供列印頁使用（不需要另外的 img.js）
-const VERSION = 'draw.js v24';
+const VERSION = 'draw.js v25';
 const FAL_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const FAL_MULTI = 'https://fal.run/fal-ai/flux-pro/kontext/multi';
 const MODELS = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))];
@@ -204,6 +204,28 @@ async function fallback(page, said, cast, helperCast) {
 }
 
 const normCode = s => String(s||'').normalize('NFKC').trim().toLowerCase();
+// 第 0 頁＝狼的角色設定圖：每本書只畫一次，之後所有出現狼的頁面都參考它
+async function wolfSheet(b, res) {
+  if (!okHost(b.image)) return res.status(400).json({ error: '參數不正確' });
+  const prompt =
+    `Create a brand new character, completely different from the girl in the input image: ${WOLF}. ` +
+    `Full body, standing upright on two legs like a person, facing the viewer in a relaxed friendly pose, arms at his sides, both hands clearly drawn with five distinct fingers. ` +
+    `Plain soft cream background, nothing else, no other characters. Same crayon drawing style as the input image, no text.`;
+  const go = async (tol) => {
+    const resp = await fetch(FAL_URL, { method: 'POST', signal: AbortSignal.timeout(50000), headers: { Authorization: `Key ${process.env.FAL_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, image_url: b.image, aspect_ratio: '3:4', output_format: 'jpeg', safety_tolerance: tol }) });
+    const t = await resp.text(); let f; try { f = JSON.parse(t); } catch (e) { f = {}; }
+    return { f, status: resp.status };
+  };
+  try {
+    let { f, status } = await go('4');
+    let u = f && f.images && f.images[0] && f.images[0].url;
+    if (u) { try { const n = (await (await fetch(u)).arrayBuffer()).byteLength; if (n < 25000) u = ''; } catch (e) {} }
+    if (!u && status !== 403) { ({ f, status } = await go('6')); u = f && f.images && f.images[0] && f.images[0].url; }
+    if (!u) return res.status(502).json({ error: '狼的設定圖沒畫出來 ' + status });
+    return res.status(200).json({ image: u });
+  } catch (e) { return res.status(500).json({ error: String(e.message || e) }); }
+}
+
 module.exports = async (req, res) => {
   // 圖片代理（GET）
   if (req.method === 'GET') {
@@ -225,6 +247,7 @@ module.exports = async (req, res) => {
   if (typeof b === 'string') { try { b = JSON.parse(b); } catch { b = {}; } }
   b = b || {};
   const page = Number(b.page);
+  if (page === 0) return wolfSheet(b, res);
   if (!SPEC[page] || !okHost(b.image)) return res.status(400).json({ error: '參數不正確' });
 
   const said = clip(b.said, 200);
@@ -249,7 +272,7 @@ module.exports = async (req, res) => {
     // 參考圖：沿用前面頁已畫好的狼／幫手／奶奶，讓長相延續（第 1 張永遠是主角）
     const imgOf = (pg) => ((hist.find((h) => h.p === pg) || {}).image) || '';
     const refs = [b.image]; const refNote = [];
-    if (page === 4 || page === 6 || page === 7) { const w = imgOf(3); if (w) { refs.push(w); refNote.push(`Image ${refs.length} shows the wolf: draw exactly this same wolf (same face, eyes, muzzle, ears, fur color and markings) wherever the wolf appears.`); } }
+    if (page === 3 || page === 4 || page === 6 || page === 7) { const w = okHost(b.wolf) ? b.wolf : imgOf(3); if (w) { refs.push(w); refNote.push(`Image ${refs.length} shows the wolf: draw exactly this same wolf (same face, eyes, muzzle, ears, fur color and markings) wherever the wolf appears.`); } }
     if (page === 6) { const h5 = imgOf(5); if (h5) { refs.push(h5); refNote.push(`Image ${refs.length} shows the child's helper: draw exactly this same helper creature wherever it appears.`); } }
     if (page === 7) { const h6 = imgOf(6); if (h6) { refs.push(h6); refNote.push(`Image ${refs.length} shows the grandmother (the elderly woman) and the helper: keep both looking exactly the same.`); } }
     const multi = refs.length > 1;
@@ -285,7 +308,7 @@ module.exports = async (req, res) => {
     const isBlack = async (f) => { if (flagged(f)) return true; const n = await sizeOf(f); bytes = n; return n >= 0 && n < 25000; };
     let fr, fstatus = 0, retried = false, bytes = -2, usedMulti = false;
     try {
-      ({ fr, fstatus, usedMulti } = await callFal(prompt, ''));
+      ({ fr, fstatus, usedMulti } = await callFal(prompt, '4'));
       if (multi && !(fr && fr.images && fr.images[0])) { ({ fr, fstatus, usedMulti } = await callFal(prompt, '', false)); } // 多參考圖失敗就退回單張
       if ((await isBlack(fr)) && Date.now() - T0 < 36000) {
         retried = true;
@@ -295,8 +318,9 @@ module.exports = async (req, res) => {
           `New scene: a gentle, wholesome children's picture-book moment, ${clip(sc.scene_en, 260).split('.')[0].replace(/\bwolf\b/gi, 'friendly fluffy dog-like creature').replace(/[.\s]+$/, '')}. ` +
           (soft.length ? `Other friendly characters: ${soft.join('; ')}, all fully clothed, with no red hood. ` : '') +
           `Same crayon drawing style, no text, no letters, no speech bubbles, no thought bubbles.`;
-        ({ fr, fstatus } = await callFal(simple, '5', false));
-        bytes = await sizeOf(fr);
+        // 先用同樣的提示詞＋參考圖再試一次（鬆一點的安全檢查），讓狼的長相不要變
+        ({ fr, fstatus, usedMulti } = await callFal(prompt, '6'));
+        if (await isBlack(fr)) { ({ fr, fstatus } = await callFal(simple, '5', false)); bytes = await sizeOf(fr); }
       }
     } catch (e) {
       return res.status(504).json({ error: '畫圖等太久了（' + (e.name || 'timeout') + '），請按「重畫」', mode, gerr });
