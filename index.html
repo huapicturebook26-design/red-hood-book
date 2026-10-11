@@ -242,7 +242,7 @@ async function genChar(){
   let r=await fetch('/api/character',{method:'POST',headers:hdr(),body:JSON.stringify(ans)});
   if(r.status===401){const c=prompt('請輸入展場通行碼');if(c){sessionStorage.setItem('code',c.trim());r=await fetch('/api/character',{method:'POST',headers:hdr(),body:JSON.stringify(ans)})}}
   const d=await readJson(r);
-  if(!r.ok||!d.images)throw new Error(d.error||(r.status===401?'通行碼不對':'沒畫出來'));
+  if(!r.ok||!d.images){if(r.status===401)sessionStorage.removeItem('code');throw new Error(d.error||'沒畫出來')}
   clearInterval(wt);window.cands=d.images;phase='cands';paintDesign();
  }catch(e){clearInterval(wt);rounds--;phase='ready';paintDesign();dbg('失敗：'+e.message);const x=$('err');if(x)x.textContent=e.message}
 }
