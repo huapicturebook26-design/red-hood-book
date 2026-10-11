@@ -322,7 +322,7 @@ function go(n,dir){return turn(()=>spreadHtml(n),dir||(n>=cur?1:-1))}
 async function genPage(p,tryn){
  tryn=tryn||1;
  st[p]='busy';if(cur===p){paintImg();paintCap()}
- const hist=book.pages.slice(0,p-2).map((x,i)=>x&&{p:i+2,caption:textFor(i+2),said:saidFx[i+2]||said[i+2]||'',cast:x.cast,cam:x.cam}).filter(Boolean);
+ const hist=book.pages.slice(0,p-2).map((x,i)=>x&&{p:i+2,caption:textFor(i+2),said:saidFx[i+2]||said[i+2]||'',cast:x.cast,cam:x.cam,image:x.image}).filter(Boolean);
  try{
   let r=await fetch('/api/draw',{method:'POST',headers:hdr(),body:JSON.stringify({image:book.cover,page:p,said:saidFx[p]||said[p]||'',history:hist})});
   if(r.status===401){const c=prompt('請輸入展場通行碼');if(c){sessionStorage.setItem('code',c.trim());r=await fetch('/api/draw',{method:'POST',headers:hdr(),body:JSON.stringify({image:book.cover,page:p,said:saidFx[p]||said[p]||'',history:hist})})}}
