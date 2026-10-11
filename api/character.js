@@ -38,11 +38,12 @@ function buildPrompt({ gender, hair, skin, basket }) {
   );
 }
 
+const normCode = s => String(s||'').normalize('NFKC').trim().toLowerCase();
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!process.env.FAL_KEY) return res.status(500).json({ error: '伺服器還沒設定 FAL_KEY' });
   const code = process.env.ACCESS_CODE;
-  if (code && req.headers['x-access-code'] !== code) return res.status(401).json({ error: '需要展場通行碼' });
+  if (code && normCode(req.headers['x-access-code']) !== normCode(code)) return res.status(401).json({ error: '通行碼不對（伺服器收到 '+String(req.headers['x-access-code']||'').length+' 個字，應為 '+String(code).trim().length+' 個字）' });
 
   let b = req.body;
   if (typeof b === 'string') { try { b = JSON.parse(b); } catch { b = {}; } }
@@ -54,7 +55,13 @@ module.exports = async (req, res) => {
   }
 
   const host = req.headers['x-forwarded-host'] || req.headers.host;
-  const image_url = `https://${host}/base-girl.jpg`;
+  let image_url = `https://${host}/base-girl.jpg`;
+  for (const n of ['base-girl.jpg', 'base-girl.JPG']) { // 大小寫都接受
+    try {
+      const h = await fetch(`https://${host}/${n}`, { method: 'HEAD' });
+      if (h.ok) { image_url = `https://${host}/${n}`; break; }
+    } catch (e) {}
+  }
   const prompt = buildPrompt(a);
   const call = () =>
     fetch(FAL_URL, {
