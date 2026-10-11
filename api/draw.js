@@ -1,6 +1,6 @@
 // 故事頁生成：Gemini（或備用的 MyMemory）把孩子的話織進小紅帽的故事框架，再由 Kontext 用同一個角色畫出這一頁
 // 另外：GET /api/page?u=圖片網址 兼任圖片代理，供列印頁使用（不需要另外的 img.js）
-const VERSION = 'draw.js v15';
+const VERSION = 'draw.js v16';
 const FAL_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const MODELS = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))];
 const OKHOST = ['fal.media', 'fal.run', 'fal.ai'];
@@ -95,18 +95,20 @@ const noSpeech = (t) => t.replace(/[，,。\s]*(他|牠|它|她)?對.{0,8}(說|�
 async function viaClaude(userMsg) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    signal: AbortSignal.timeout(9000),
+    signal: AbortSignal.timeout(12000),
     headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
       model: process.env.CLAUDE_MODEL || 'claude-haiku-5-5',
       max_tokens: 500,
       system: SYSTEM + ' Also include slot_zh: only for page 5, the helper the child chose as a short Traditional Chinese noun phrase with no verbs (e.g. 太陽跟月亮, 一隻恐龍); only for pages 6 and 7, the activity as a short Traditional Chinese verb phrase that fits right after 「狼和奶奶在」 (e.g. 畫萬聖節的南瓜、開萬聖節派對); gently fix obvious speech-recognition homophone mistakes; empty string for other pages. Reply with one JSON object only.',
-      messages: [{ role: 'user', content: userMsg }, { role: 'assistant', content: '{' }],
+      messages: [{ role: 'user', content: userMsg + '\n\nReply with ONE JSON object only (keys: caption_zh, scene_en, camera_en, cast_en, slot_zh). No markdown, no extra text.' }],
     }),
   }).then((x) => x.json());
   if (r.error) throw new Error(`Claude ${r.error.type || ''} ${r.error.message || ''}`);
-  const txt = '{' + ((r.content && r.content[0] && r.content[0].text) || '');
-  const o = JSON.parse(txt.slice(0, txt.lastIndexOf('}') + 1));
+  const txt = ((r.content || []).map((c) => c.text || '').join('')) || '';
+  const a = txt.indexOf('{'), z = txt.lastIndexOf('}');
+  if (a < 0 || z < a) throw new Error('Claude 沒回 JSON：' + clip(txt, 80));
+  const o = JSON.parse(txt.slice(a, z + 1));
   if (!o.scene_en) throw new Error('Claude 回覆不完整');
   if (!o.caption_zh) o.caption_zh = '';
   return o;
