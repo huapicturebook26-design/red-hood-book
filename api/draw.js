@@ -1,6 +1,6 @@
 // 故事頁生成：Gemini（或備用的 MyMemory）把孩子的話織進小紅帽的故事框架，再由 Kontext 用同一個角色畫出這一頁
 // 另外：GET /api/page?u=圖片網址 兼任圖片代理，供列印頁使用（不需要另外的 img.js）
-const VERSION = 'draw.js v17';
+const VERSION = 'draw.js v19';
 const FAL_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const MODELS = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))];
 const OKHOST = ['fal.media', 'fal.run', 'fal.ai'];
@@ -17,22 +17,61 @@ const SPEC = {
   2: "At home. The mother stands at the cottage door and, with a caring face, asks the child to visit her grandmother who is feeling a little unwell; she hands over the basket of treats and reminds the child to be careful on the way.",
   3: "In the forest the child is picking a few flowers to bring to grandmother. Suddenly a wolf walks toward her. The CHILD'S IDEA is what the wolf says to her: let it decide the wolf's expression and body language (friendly, sneaky, funny, shy...). The wolf is a cartoon wolf, not scary.",
   4: "The child kindly gives the wolf some food from her basket, tells him she will visit grandmother by herself and says goodbye, waving. The wolf stays behind. The CHILD'S IDEA is what the wolf is thinking or planning: show it through his expression, pose and a small hint in the scene (for example looking toward a shortcut).",
-  5: "The child arrives at grandmother's front door and finds the door wide open, which feels strange and worrying. She has decided to ask the CHILD'S IDEA character (any person, animal or creature the child named) for help, and that helper stands right next to her. Nobody else is visible, the wolf and grandmother are not shown.",
+  5: "The child arrives at grandmother's front door and finds the door wide open, which feels strange and worrying. She has decided to ask the CHILD'S IDEA character (any person, animal or creature the child named) for help, and that helper stands right next to her, fully visible, clearly recognizable as exactly what the child named (show its distinctive features and colors) and not tiny. Nobody else is visible, the wolf and grandmother are not shown.",
   6: "The child and her helper step into the cottage and see the wolf and grandmother. It is not what they expected: the wolf and grandmother are happily doing the CHILD'S IDEA activity together. The child and helper look surprised, the wolf and grandmother look cheerful. Nothing scary.",
   7: "Everybody joins in: the wolf, grandmother, the helper and the child all happily do the CHILD'S IDEA activity (the same one as the previous page) together, laughing.",
   8: 'Final quiet picture: the main child seen from behind, walking away along the winding forest path toward the sunset, carrying the basket.',
 };
-// 每一頁的鏡頭語言（打破「角色永遠站正中間」）
-const CAM = {
-  2: 'Wide establishing shot from a low angle outside the cottage: the mother stands in the doorway on the right handing over the basket, the child stands on the left third of the frame in three-quarter view, the cottage and the winding path fill the background.',
-  3: 'Wide forest shot with depth: the child is small on the left third, bending to pick flowers, flowers in the foreground; the wolf walks toward her from the right middle distance between the trees.',
-  4: 'Two-part composition: the child walks away along the path in the lower-left foreground, waving back; the wolf stands in the right background, looking after her with a thoughtful expression.',
-  5: "Low-angle wide shot in front of grandmother's cottage: the wooden front door stands wide open at the center-right; the child is on the left third looking at it with a worried face, her helper standing right beside her.",
-  6: 'Interior wide shot from the doorway looking in: the wolf and grandmother are busy at the right and center of the room; the child and her helper are small in the left foreground with surprised faces.',
-  7: 'Medium-wide shot, slightly high angle, inside the cottage: everyone is spread around the room joining in together; the child is not in the center.',
-  8: 'Wide shot from behind: the child seen from the back walking away along a winding forest path toward a glowing sunset, small in the lower-left third of the frame, trees framing both sides.',
+// 每一頁的鏡頭語言：每頁有數種鏡頭可選，並要求和前面幾頁不同（避免角色永遠站正中間）
+const CAMS = {
+  2: [
+    'Wide establishing shot from a low angle outside the cottage: the mother stands in the doorway on the right handing over the basket, the child stands on the left third in three-quarter view, the cottage and the winding path fill the background.',
+    'Warm medium shot from slightly behind the child\'s shoulder: we see the mother\'s kind face and the basket being handed over in the doorway, the garden gate and flowers framing the foreground.',
+    'High-angle shot looking down at the cottage front yard: the mother and child are small figures near the door, a stone path, a vegetable patch and a fence leading toward the forest.',
+  ],
+  3: [
+    'Wide forest shot with depth: the child is small on the left third, bending to pick flowers, flowers in the foreground; the wolf walks toward her from the right middle distance between the trees.',
+    'Low worm\'s-eye angle from among the flowers: big blossoms and grass blades frame the bottom of the picture, the child kneels at the left, the wolf appears larger at the right edge, tree trunks rising behind.',
+    'Over-the-shoulder shot from behind the child: the wolf stands in the open path ahead filling the right half of the frame, sunbeams falling through the leaves.',
+  ],
+  4: [
+    'Two-part composition: the child walks away along the path in the lower-left foreground, waving back; the wolf stands in the right background, looking after her.',
+    'Close-up on the wolf\'s face and upper body at the right, the tiny child walking away down the path in the far left distance, a basket swinging.',
+    'Bird\'s-eye view from above the treetops: a winding forest path with the small child walking along it and the wolf standing at a fork, the fork leading to a shortcut.',
+  ],
+  5: [
+    "Low-angle wide shot in front of grandmother's cottage: the wooden front door stands wide open at the center-right; the child is on the left third looking at it with a worried face, her helper standing right beside her.",
+    'Close shot from behind the child and her helper, both looking up at the open dark doorway, the door and a wooden porch dominating the frame, leaves blowing in the wind.',
+    'Side-view wide shot across the garden: the child and her helper stand small at the garden gate on the left, the cottage with its open door and chimney fills the right, a long path between them.',
+  ],
+  6: [
+    'Interior wide shot from the doorway looking in: the wolf and grandmother are busy at the right and center of the room; the child and her helper are small in the left foreground with surprised faces.',
+    'Through-the-door framing: the wooden doorframe forms a border, the child and helper peek in from the left foreground, the room beyond is full of activity, warm window light.',
+    'High-angle shot from the ceiling corner looking down at the whole room: the wolf and grandmother in the middle of the activity, the child and helper entering at the bottom edge.',
+  ],
+  7: [
+    'Medium-wide shot, slightly high angle, inside the cottage: everyone is spread around the room joining in together; the child is not in the center.',
+    'Low-angle wide shot from the floor level: all five characters laughing and joining in, objects of the activity in the foreground, a window with golden light behind.',
+    'Close, lively group shot from the side: faces full of joy overlapping in the frame, the activity props in the lower foreground, the child at the right edge.',
+  ],
+  8: [
+    'Wide shot from behind: the child seen from the back walking away along a winding forest path toward a glowing sunset, small in the lower-left third of the frame, trees framing both sides.',
+  ],
 };
-const SYSTEM = `You are the story editor of an interactive "Little Red Riding Hood" picture book for children aged 3-8 and their parents. The story script is fixed by the author; follow the "must happen" line for the current page exactly and use the child's idea only for the part the line says it decides. If the idea is off-theme, turn it into a fun, kind detail. Anything violent, scary, sexual or unsafe must be gently rewritten into something kind or funny. Reuse the exact same appearance description for recurring characters (the story so far lists them). Think like a picture-book director: use the camera suggestion and adapt it; never place the child in the center of every picture. Output JSON only: caption_zh = a very short Traditional Chinese label (at most 12 characters, it is not shown); scene_en = one or two English sentences describing the action and expressions in the picture, naming every object, animal and character concretely; camera_en = one English sentence about shot, angle and composition; cast_en = array of short English appearance descriptions of every non-protagonist character present on this page (empty array if none; the helper and wolf and grandmother each need a description). Never put text, letters, signs, speech bubbles or thought bubbles in the picture; show thoughts and words only through facial expressions and body language, and never use the words 'thinking' or 'says' in scene_en. Only the main child wears a red hood; every other character must have different clothes and look clearly different from the child. When these characters appear, use these exact descriptions: mother = ${MOTHER}; grandmother = ${GRANDMA}; hunter = ${HUNTER}; wolf = ${WOLF} (unless the child described the wolf differently).`;
+const CAM = Object.fromEntries(Object.entries(CAMS).map(([k, v]) => [k, v[0]]));
+const pickCam = (page, used) => { const all = CAMS[page] || [CAM[page]]; const free = all.filter((c) => !(used || []).some((u) => u && u.slice(0, 40) === c.slice(0, 40))); const pool = free.length ? free : all; return pool[Math.floor(Math.random() * pool.length)]; };
+// 每一頁的環境與光線（讓背景豐富、時間隨故事推進）
+const ENV = {
+  2: 'bright morning light, a cozy cottage with a chimney, hollyhocks and a picket fence, a hen and chicks in the yard',
+  3: 'late morning forest, dappled sunbeams, mushrooms, ferns, fallen golden leaves, butterflies and a stream in the distance',
+  4: 'noon light on a winding path, tall trees, wild flowers, a small bridge over a brook, a bird on a branch',
+  5: 'afternoon light, grandmother\'s little cottage at the edge of the forest, a garden with a watering can and a flower pot, leaves drifting in the wind, a hint of the dark open doorway',
+  6: 'warm cozy cottage interior, a wooden table, chairs, a rug, a window with a view of the garden, shelves with jars, a fireplace',
+  7: 'warm golden late-afternoon light through the windows, the cozy cottage interior full of cheerful details, little decorations everywhere',
+  8: 'glowing orange sunset, long soft shadows, fireflies beginning to appear',
+};
+
+const SYSTEM = `You are the story editor of an interactive "Little Red Riding Hood" picture book for children aged 3-8 and their parents. The story script is fixed by the author; follow the "must happen" line for the current page exactly and use the child's idea only for the part the line says it decides. If the idea is off-theme, turn it into a fun, kind detail. Never draw an existing franchise, game, film or brand character: if the idea mentions one, use only the looks the child described to create an original creature. Anything violent, scary, sexual or unsafe must be gently rewritten into something kind or funny. Reuse the exact same appearance description for recurring characters (the story so far lists them). Think like a picture-book director: choose or blend one of the camera options so that it suits the child's idea (a huge thing needs a wide shot, a feeling needs a close-up) and is clearly different from the cameras used on earlier pages; never place the child in the center of every picture. Make every picture a rich, detailed storybook scene: in scene_en name three or four concrete background and foreground details (props, plants, animals, weather, light) taken from the environment hint and from the child's idea, and give each character a different place and size in the frame. Output JSON only: caption_zh = a very short Traditional Chinese label (at most 12 characters, it is not shown); scene_en = two or three English sentences describing the action and expressions in the picture, naming every object, animal and character concretely; camera_en = one English sentence about shot, angle and composition; cast_en = array of short English appearance descriptions of every non-protagonist character present on this page (empty array if none; the helper and wolf and grandmother each need a description). Never put text, letters, signs, speech bubbles or thought bubbles in the picture; show thoughts and words only through facial expressions and body language, and never use the words 'thinking' or 'says' in scene_en. Only the main child wears a red hood; every other character must have different clothes and look clearly different from the child. When these characters appear, use these exact descriptions: mother = ${MOTHER}; grandmother = ${GRANDMA}; hunter = ${HUNTER}; wolf = ${WOLF} (unless the child described the wolf differently).`;
 const clip = (s, n) => String(s || '').slice(0, n);
 
 async function viaGemini(userMsg) {
@@ -129,6 +168,7 @@ const CHIP = {
   6: [[/生日|派對|慶祝/, 'having a birthday party with a cake, balloons and party hats'], [/蛋糕|烤|烘焙|餅乾/, 'baking a cake together in the cozy kitchen'], [/捉迷藏|躲/, 'playing hide and seek around the room'], [/跳舞|唱歌|音樂|唱|跳/, 'dancing and singing together']],
 };
 const pick = (page, z) => { const m = (CHIP[page] || []).find(([re]) => re.test(z)); return m ? m[1] : ''; };
+let usedCams = [];
 async function fallback(page, said, cast, helperCast) {
   const z = BAD.test(said) ? '' : said.replace(/[。！!？?]+$/, '');
   const wolf = cast.find((c) => /wolf/i.test(c)) || WOLF;
@@ -159,7 +199,7 @@ async function fallback(page, said, cast, helperCast) {
       ? `inside the cozy cottage, the wolf and grandmother are happily ${act}, while the child and her helper stand at the door watching in surprise`
       : `inside the cozy cottage, ${chars.join('; ')} and the child all happily join in, ${act}, laughing together`;
   } else { scene = 'the main child seen from behind, walking away along the forest path toward the sunset, carrying the basket'; chars = []; }
-  return { scene_en: scene + '.' + soft, camera_en: CAM[page], caption_zh: '', cast_en: chars };
+  return { scene_en: scene + '.' + soft, camera_en: pickCam(page, usedCams), caption_zh: '', cast_en: chars };
 }
 
 const normCode = s => String(s||'').normalize('NFKC').trim().toLowerCase();
@@ -187,10 +227,10 @@ module.exports = async (req, res) => {
   if (!SPEC[page] || !okHost(b.image)) return res.status(400).json({ error: '參數不正確' });
 
   const said = clip(b.said, 200);
-  const hist = (Array.isArray(b.history) ? b.history : []).slice(0, 7).map((h) => ({ p: Number(h.p), caption: clip(h.caption, 200), said: clip(h.said, 100), cast: (Array.isArray(h.cast) ? h.cast : []).slice(0, 5).map((c) => clip(c, 160)) }));
+  const hist = (Array.isArray(b.history) ? b.history : []).slice(0, 7).map((h) => ({ p: Number(h.p), caption: clip(h.caption, 200), said: clip(h.said, 100), cast: (Array.isArray(h.cast) ? h.cast : []).slice(0, 5).map((c) => clip(c, 160)), cam: clip(h.cam, 400) }));
   const cast = [...new Set(hist.filter((h) => h.p >= 3).flatMap((h) => h.cast))].slice(0, 8);
   const userMsg =
-    `Page ${page} of 8.\nMust happen: ${SPEC[page]}\nCamera suggestion: ${CAM[page]}\nChild's idea: ${said || '(none, you decide)'}\n` +
+    `Page ${page} of 8.\nMust happen: ${SPEC[page]}\nCamera options (pick or blend one; it must differ from cameras already used): ${(CAMS[page] || [CAM[page]]).join(' || ')}\nEnvironment and light: ${ENV[page] || ''}\nCameras already used on earlier pages: ${hist.map((h) => h.cam).filter(Boolean).join(' || ') || '(none)'}\nChild's idea: ${said || '(none, you decide)'}\n` +
     `Story so far:\n${hist.map((h) => `Page ${h.p}: ${h.caption}${h.said ? ' (child said: ' + h.said + ')' : ''}`).join('\n') || '(nothing yet)'}\n` +
     `Characters so far (reuse these exact descriptions): ${cast.join(' | ') || '(none)'}` +
     (page === 8 ? '\nInclude ALL characters so far in the final group picture.' : '');
@@ -201,13 +241,15 @@ module.exports = async (req, res) => {
     if (page === 8) { mode = 'fixed'; sc = { caption_zh: '小紅帽開心地走向回家的路。', scene_en: SPEC[8].replace(/^Final quiet picture: /, '').replace(/\.$/, '') + '. Gentle and peaceful', camera_en: CAM[8], cast_en: [] }; }
     else if (said && !isChip(page, said) && process.env.ANTHROPIC_API_KEY) { try { sc = await viaClaude(userMsg); mode = 'claude'; } catch (e) { gerr = clip(e.message || e, 160); } }
     else if (process.env.USE_GEMINI === '1' && process.env.GEMINI_API_KEY) { try { sc = await viaGemini(userMsg); } catch (e) { gerr = clip(e.message || e, 160); } }
+    usedCams = hist.map((h) => h.cam).filter(Boolean);
     if (!sc) { mode = 'rules'; sc = await fallback(page, said, cast, (hist.find((h) => h.p === 5) || {}).cast); }
     const chars = (Array.isArray(sc.cast_en) ? sc.cast_en : []).slice(0, 5).map((c) => clip(c, 160));
     // 沿用 Playground 實測有效的簡潔寫法
     const prompt =
       `Keep the child in the red hooded cape exactly the same (face, hair, skin tone, outfit). Do not copy the centered pose. ` +
       `New scene: ${clip(sc.scene_en, 600).replace(/[.\s]+$/, '')}. ` +
-      `${clip(sc.camera_en || CAM[page], 400).replace(/[.\s]+$/, '')}. ` +
+      `${clip(sc.camera_en || pickCam(page, usedCams), 400).replace(/[.\s]+$/, '')}. ` +
+      (ENV[page] ? `Rich detailed background: ${ENV[page]}. ` : '') +
       (chars.length
         ? `Add only ${chars.join('; ')} as other characters, clearly different from the child, with no red hood, and nobody else. `
         : 'No other characters. ') +
@@ -231,7 +273,7 @@ module.exports = async (req, res) => {
       const why = typeof fr.detail === 'string' ? fr.detail : JSON.stringify(fr.detail || fr.raw || fr).slice(0, 200);
       return res.status(502).json({ error: '畫圖服務回應 ' + fstatus + '：' + clip(why, 160), mode, gerr });
     }
-    return res.status(200).json({ image, mode, gerr: mode === 'gemini' ? '' : gerr, caption: clip(sc.caption_zh, 40), slot: clip(sc.slot_zh, 40), cast: chars });
+    return res.status(200).json({ image, mode, gerr: mode === 'gemini' ? '' : gerr, caption: clip(sc.caption_zh, 40), cam: clip(sc.camera_en, 400), slot: clip(sc.slot_zh, 40), cast: chars });
   } catch (e) {
     return res.status(500).json({ error: '生成時發生錯誤：' + e.message });
   }
