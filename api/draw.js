@@ -1,6 +1,6 @@
 // 故事頁生成：Gemini（或備用的 MyMemory）把孩子的話織進小紅帽的故事框架，再由 Kontext 用同一個角色畫出這一頁
 // 另外：GET /api/page?u=圖片網址 兼任圖片代理，供列印頁使用（不需要另外的 img.js）
-const VERSION = 'draw.js v19';
+const VERSION = 'draw.js v21';
 const FAL_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const MODELS = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))];
 const OKHOST = ['fal.media', 'fal.run', 'fal.ai'];
@@ -254,26 +254,45 @@ module.exports = async (req, res) => {
         ? `Add only ${chars.join('; ')} as other characters, clearly different from the child, with no red hood, and nobody else. `
         : 'No other characters. ') +
       `Same crayon drawing style, no text, no letters, no speech bubbles, no thought bubbles.`;
-    let fr, fstatus = 0;
-    try {
+    const callFal = async (p, tol) => {
       const resp = await fetch(FAL_URL, {
         method: 'POST',
-        signal: AbortSignal.timeout(Math.max(15000, 56000 - (Date.now() - T0))),
+        signal: AbortSignal.timeout(Math.max(12000, 57000 - (Date.now() - T0))),
         headers: { Authorization: `Key ${process.env.FAL_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, image_url: b.image, aspect_ratio: '3:4', output_format: 'jpeg' }),
+        body: JSON.stringify({ prompt: p, image_url: b.image, aspect_ratio: '3:4', output_format: 'jpeg', ...(tol ? { safety_tolerance: tol } : {}) }),
       });
-      fstatus = resp.status;
       const txt = await resp.text();
-      try { fr = JSON.parse(txt); } catch (e) { fr = { raw: clip(txt, 200) }; }
+      let f; try { f = JSON.parse(txt); } catch (e) { f = { raw: clip(txt, 200) }; }
+      return { fr: f, fstatus: resp.status };
+    };
+    const flagged = (f) => !!(f && Array.isArray(f.has_nsfw_concepts) && f.has_nsfw_concepts.some(Boolean));
+    // 全黑的圖壓縮後非常小（蠟筆畫通常 100KB 以上），用大小判斷圖是不是被擋成黑圖
+    const sizeOf = async (f) => { try { const u = f && f.images && f.images[0] && f.images[0].url; if (!u) return -1; const r = await fetch(u, { signal: AbortSignal.timeout(8000) }); return (await r.arrayBuffer()).byteLength; } catch (e) { return -1; } };
+    const isBlack = async (f) => { if (flagged(f)) return true; const n = await sizeOf(f); bytes = n; return n >= 0 && n < 25000; };
+    let fr, fstatus = 0, retried = false, bytes = -2;
+    try {
+      ({ fr, fstatus } = await callFal(prompt, ''));
+      if ((await isBlack(fr)) && Date.now() - T0 < 36000) {
+        retried = true;
+        const soft = chars.map((c) => c.replace(/\b(gray |grey )?cartoon wolf|\bwolf\b/gi, 'friendly fluffy gray dog-like cartoon creature'));
+        const simple =
+          `Keep the child in the red hooded cape exactly the same (face, hair, skin tone, outfit). Do not copy the centered pose. ` +
+          `New scene: a gentle, wholesome children's picture-book moment, ${clip(sc.scene_en, 260).split('.')[0].replace(/\bwolf\b/gi, 'friendly fluffy dog-like creature').replace(/[.\s]+$/, '')}. ` +
+          (soft.length ? `Other friendly characters: ${soft.join('; ')}, all fully clothed, with no red hood. ` : '') +
+          `Same crayon drawing style, no text, no letters, no speech bubbles, no thought bubbles.`;
+        ({ fr, fstatus } = await callFal(simple, '5'));
+        bytes = await sizeOf(fr);
+      }
     } catch (e) {
       return res.status(504).json({ error: '畫圖等太久了（' + (e.name || 'timeout') + '），請按「重畫」', mode, gerr });
     }
+    if (flagged(fr) || (bytes >= 0 && bytes < 25000)) return res.status(502).json({ error: '這張圖被安全檢查擋下來了（黑圖），請按「重畫這一頁」', mode, gerr, bytes });
     const image = fr && fr.images && fr.images[0] && fr.images[0].url;
     if (!image) {
       const why = typeof fr.detail === 'string' ? fr.detail : JSON.stringify(fr.detail || fr.raw || fr).slice(0, 200);
       return res.status(502).json({ error: '畫圖服務回應 ' + fstatus + '：' + clip(why, 160), mode, gerr });
     }
-    return res.status(200).json({ image, mode, gerr: mode === 'gemini' ? '' : gerr, caption: clip(sc.caption_zh, 40), cam: clip(sc.camera_en, 400), slot: clip(sc.slot_zh, 40), cast: chars });
+    return res.status(200).json({ image, mode, gerr: mode === 'gemini' ? '' : gerr, dbg: `bytes=${bytes}${retried ? ',retried' : ''}`, caption: clip(sc.caption_zh, 40), cam: clip(sc.camera_en, 400), slot: clip(sc.slot_zh, 40), cast: chars });
   } catch (e) {
     return res.status(500).json({ error: '生成時發生錯誤：' + e.message });
   }
