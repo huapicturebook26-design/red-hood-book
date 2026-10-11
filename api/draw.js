@@ -1,7 +1,8 @@
 // 故事頁生成：Gemini（或備用的 MyMemory）把孩子的話織進小紅帽的故事框架，再由 Kontext 用同一個角色畫出這一頁
 // 另外：GET /api/page?u=圖片網址 兼任圖片代理，供列印頁使用（不需要另外的 img.js）
-const VERSION = 'draw.js v21';
+const VERSION = 'draw.js v22';
 const FAL_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
+const FAL_MULTI = 'https://fal.run/fal-ai/flux-pro/kontext/multi';
 const MODELS = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))];
 const OKHOST = ['fal.media', 'fal.run', 'fal.ai'];
 const okHost = (u) => { try { const x = new URL(u); return x.protocol === 'https:' && OKHOST.some((h) => x.hostname === h || x.hostname.endsWith('.' + h)); } catch (e) { return false; } };
@@ -18,7 +19,7 @@ const SPEC = {
   3: "In the forest the child is picking a few flowers to bring to grandmother. Suddenly a wolf walks toward her. The CHILD'S IDEA is what the wolf says to her: let it decide the wolf's expression and body language (friendly, sneaky, funny, shy...). The wolf is a cartoon wolf, not scary.",
   4: "The child kindly gives the wolf some food from her basket, tells him she will visit grandmother by herself and says goodbye, waving. The wolf stays behind. The CHILD'S IDEA is what the wolf is thinking or planning: show it through his expression, pose and a small hint in the scene (for example looking toward a shortcut).",
   5: "The child arrives at grandmother's front door and finds the door wide open, which feels strange and worrying. She has decided to ask the CHILD'S IDEA character (any person, animal or creature the child named) for help, and that helper stands right next to her, fully visible, clearly recognizable as exactly what the child named (show its distinctive features and colors) and not tiny. Nobody else is visible, the wolf and grandmother are not shown.",
-  6: "The child and her helper step into the cottage and see the wolf and grandmother. It is not what they expected: the wolf and grandmother are happily doing the CHILD'S IDEA activity together. The child and helper look surprised, the wolf and grandmother look cheerful. Nothing scary.",
+  6: "The child and her helper only reach the open doorway and peek into the cottage, standing at the edge of the picture seen partly from behind, with surprised faces. They do NOT take part in the activity. Inside the room, the WOLF and the GRANDMOTHER (both must be clearly visible, together, at the center of the picture) happily do the CHILD'S IDEA activity with each other, nothing scary.",
   7: "Everybody joins in: the wolf, grandmother, the helper and the child all happily do the CHILD'S IDEA activity (the same one as the previous page) together, laughing.",
   8: 'Final quiet picture: the main child seen from behind, walking away along the winding forest path toward the sunset, carrying the basket.',
 };
@@ -45,11 +46,11 @@ const CAMS = {
     'Side-view wide shot across the garden: the child and her helper stand small at the garden gate on the left, the cottage with its open door and chimney fills the right, a long path between them.',
   ],
   6: [
-    'Interior wide shot from the doorway looking in: the wolf and grandmother are busy at the right and center of the room; the child and her helper are small in the left foreground with surprised faces.',
-    'Through-the-door framing: the wooden doorframe forms a border, the child and helper peek in from the left foreground, the room beyond is full of activity, warm window light.',
-    'High-angle shot from the ceiling corner looking down at the whole room: the wolf and grandmother in the middle of the activity, the child and helper entering at the bottom edge.',
+    'Interior wide shot from just inside the doorway: the child and her helper are small, seen from behind in the bottom-left corner, peeking in; the wolf and the grandmother sit together at a table in the middle-right, busy with their activity, window light behind them.',
+    'Through-the-door framing: the wooden doorframe forms a dark border around the picture, the child and helper peek in from the left foreground in back view, and the bright room beyond shows the wolf and grandmother together in the center.',
+    'High-angle shot from the ceiling corner looking down at the room: the wolf and grandmother together in the middle of the activity, the child and helper tiny at the open door at the bottom edge looking in.',
   ],
-  7: [
+ 7: [
     'Medium-wide shot, slightly high angle, inside the cottage: everyone is spread around the room joining in together; the child is not in the center.',
     'Low-angle wide shot from the floor level: all five characters laughing and joining in, objects of the activity in the foreground, a window with golden light behind.',
     'Close, lively group shot from the side: faces full of joy overlapping in the frame, the activity props in the lower foreground, the child at the right edge.',
@@ -227,7 +228,7 @@ module.exports = async (req, res) => {
   if (!SPEC[page] || !okHost(b.image)) return res.status(400).json({ error: '參數不正確' });
 
   const said = clip(b.said, 200);
-  const hist = (Array.isArray(b.history) ? b.history : []).slice(0, 7).map((h) => ({ p: Number(h.p), caption: clip(h.caption, 200), said: clip(h.said, 100), cast: (Array.isArray(h.cast) ? h.cast : []).slice(0, 5).map((c) => clip(c, 160)), cam: clip(h.cam, 400) }));
+  const hist = (Array.isArray(b.history) ? b.history : []).slice(0, 7).map((h) => ({ p: Number(h.p), caption: clip(h.caption, 200), said: clip(h.said, 100), cast: (Array.isArray(h.cast) ? h.cast : []).slice(0, 5).map((c) => clip(c, 160)), cam: clip(h.cam, 400), image: okHost(h.image) ? h.image : '' }));
   const cast = [...new Set(hist.filter((h) => h.p >= 3).flatMap((h) => h.cast))].slice(0, 8);
   const userMsg =
     `Page ${page} of 8.\nMust happen: ${SPEC[page]}\nCamera options (pick or blend one; it must differ from cameras already used): ${(CAMS[page] || [CAM[page]]).join(' || ')}\nEnvironment and light: ${ENV[page] || ''}\nCameras already used on earlier pages: ${hist.map((h) => h.cam).filter(Boolean).join(' || ') || '(none)'}\nChild's idea: ${said || '(none, you decide)'}\n` +
@@ -245,33 +246,46 @@ module.exports = async (req, res) => {
     if (!sc) { mode = 'rules'; sc = await fallback(page, said, cast, (hist.find((h) => h.p === 5) || {}).cast); }
     const chars = (Array.isArray(sc.cast_en) ? sc.cast_en : []).slice(0, 5).map((c) => clip(c, 160));
     // 沿用 Playground 實測有效的簡潔寫法
+    // 參考圖：沿用前面頁已畫好的狼／幫手／奶奶，讓長相延續（第 1 張永遠是主角）
+    const imgOf = (pg) => ((hist.find((h) => h.p === pg) || {}).image) || '';
+    const refs = [b.image]; const refNote = [];
+    if (page === 4 || page === 6 || page === 7) { const w = imgOf(3); if (w) { refs.push(w); refNote.push(`Image ${refs.length} shows the wolf: draw exactly this same wolf (same face, eyes, muzzle, ears, fur color and markings) wherever the wolf appears.`); } }
+    if (page === 6) { const h5 = imgOf(5); if (h5) { refs.push(h5); refNote.push(`Image ${refs.length} shows the child's helper: draw exactly this same helper creature wherever it appears.`); } }
+    if (page === 7) { const h6 = imgOf(6); if (h6) { refs.push(h6); refNote.push(`Image ${refs.length} shows the grandmother (the elderly woman) and the helper: keep both looking exactly the same.`); } }
+    const multi = refs.length > 1;
+    const camLine = clip(sc.camera_en || pickCam(page, usedCams), 400).replace(/[.\s]+$/, '');
     const prompt =
-      `Keep the child in the red hooded cape exactly the same (face, hair, skin tone, outfit). Do not copy the centered pose. ` +
+      `Compose a completely new picture. CAMERA: ${camLine}. ` +
+      `Do not copy the pose, framing, zoom or camera angle of the input image${multi ? 's' : ''}. ` +
+      (multi ? `Image 1 shows the main child: keep the girl in the red hooded cape exactly the same (face, hair, skin tone, outfit). ${refNote.join(' ')} ` : `Keep the child in the red hooded cape exactly the same (face, hair, skin tone, outfit). `) +
       `New scene: ${clip(sc.scene_en, 600).replace(/[.\s]+$/, '')}. ` +
-      `${clip(sc.camera_en || pickCam(page, usedCams), 400).replace(/[.\s]+$/, '')}. ` +
       (ENV[page] ? `Rich detailed background: ${ENV[page]}. ` : '') +
       (chars.length
-        ? `Add only ${chars.join('; ')} as other characters, clearly different from the child, with no red hood, and nobody else. `
+        ? `Add only ${chars.join('; ')} as other characters, each clearly visible and clearly different from the child, with no red hood, and nobody else. `
         : 'No other characters. ') +
       `Same crayon drawing style, no text, no letters, no speech bubbles, no thought bubbles.`;
-    const callFal = async (p, tol) => {
-      const resp = await fetch(FAL_URL, {
+    const callFal = async (p, tol, useRefs = true) => {
+      const body = { prompt: p, aspect_ratio: '3:4', output_format: 'jpeg', ...(tol ? { safety_tolerance: tol } : {}) };
+      const m = useRefs && multi;
+      if (m) body.image_urls = refs.slice(0, 3); else body.image_url = b.image;
+      const resp = await fetch(m ? FAL_MULTI : FAL_URL, {
         method: 'POST',
         signal: AbortSignal.timeout(Math.max(12000, 57000 - (Date.now() - T0))),
         headers: { Authorization: `Key ${process.env.FAL_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: p, image_url: b.image, aspect_ratio: '3:4', output_format: 'jpeg', ...(tol ? { safety_tolerance: tol } : {}) }),
+        body: JSON.stringify(body),
       });
       const txt = await resp.text();
       let f; try { f = JSON.parse(txt); } catch (e) { f = { raw: clip(txt, 200) }; }
-      return { fr: f, fstatus: resp.status };
+      return { fr: f, fstatus: resp.status, usedMulti: m };
     };
     const flagged = (f) => !!(f && Array.isArray(f.has_nsfw_concepts) && f.has_nsfw_concepts.some(Boolean));
     // 全黑的圖壓縮後非常小（蠟筆畫通常 100KB 以上），用大小判斷圖是不是被擋成黑圖
     const sizeOf = async (f) => { try { const u = f && f.images && f.images[0] && f.images[0].url; if (!u) return -1; const r = await fetch(u, { signal: AbortSignal.timeout(8000) }); return (await r.arrayBuffer()).byteLength; } catch (e) { return -1; } };
     const isBlack = async (f) => { if (flagged(f)) return true; const n = await sizeOf(f); bytes = n; return n >= 0 && n < 25000; };
-    let fr, fstatus = 0, retried = false, bytes = -2;
+    let fr, fstatus = 0, retried = false, bytes = -2, usedMulti = false;
     try {
-      ({ fr, fstatus } = await callFal(prompt, ''));
+      ({ fr, fstatus, usedMulti } = await callFal(prompt, ''));
+      if (multi && !(fr && fr.images && fr.images[0])) { ({ fr, fstatus, usedMulti } = await callFal(prompt, '', false)); } // 多參考圖失敗就退回單張
       if ((await isBlack(fr)) && Date.now() - T0 < 36000) {
         retried = true;
         const soft = chars.map((c) => c.replace(/\b(gray |grey )?cartoon wolf|\bwolf\b/gi, 'friendly fluffy gray dog-like cartoon creature'));
@@ -280,7 +294,7 @@ module.exports = async (req, res) => {
           `New scene: a gentle, wholesome children's picture-book moment, ${clip(sc.scene_en, 260).split('.')[0].replace(/\bwolf\b/gi, 'friendly fluffy dog-like creature').replace(/[.\s]+$/, '')}. ` +
           (soft.length ? `Other friendly characters: ${soft.join('; ')}, all fully clothed, with no red hood. ` : '') +
           `Same crayon drawing style, no text, no letters, no speech bubbles, no thought bubbles.`;
-        ({ fr, fstatus } = await callFal(simple, '5'));
+        ({ fr, fstatus } = await callFal(simple, '5', false));
         bytes = await sizeOf(fr);
       }
     } catch (e) {
@@ -292,7 +306,7 @@ module.exports = async (req, res) => {
       const why = typeof fr.detail === 'string' ? fr.detail : JSON.stringify(fr.detail || fr.raw || fr).slice(0, 200);
       return res.status(502).json({ error: '畫圖服務回應 ' + fstatus + '：' + clip(why, 160), mode, gerr });
     }
-    return res.status(200).json({ image, mode, gerr: mode === 'gemini' ? '' : gerr, dbg: `bytes=${bytes}${retried ? ',retried' : ''}`, caption: clip(sc.caption_zh, 40), cam: clip(sc.camera_en, 400), slot: clip(sc.slot_zh, 40), cast: chars });
+    return res.status(200).json({ image, mode, gerr: mode === 'gemini' ? '' : gerr, dbg: `bytes=${bytes}${retried ? ',retried' : ''}${usedMulti ? ',ref' + refs.length : ''}`, caption: clip(sc.caption_zh, 40), cam: clip(sc.camera_en, 400), slot: clip(sc.slot_zh, 40), cast: chars });
   } catch (e) {
     return res.status(500).json({ error: '生成時發生錯誤：' + e.message });
   }
