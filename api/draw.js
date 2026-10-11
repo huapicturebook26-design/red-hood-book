@@ -1,6 +1,6 @@
 // 故事頁生成：Gemini（或備用的 MyMemory）把孩子的話織進小紅帽的故事框架，再由 Kontext 用同一個角色畫出這一頁
 // 另外：GET /api/page?u=圖片網址 兼任圖片代理，供列印頁使用（不需要另外的 img.js）
-const VERSION = 'draw.js v10';
+const VERSION = 'draw.js v14';
 const FAL_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const MODELS = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))];
 const OKHOST = ['fal.media', 'fal.run', 'fal.ai'];
@@ -32,7 +32,7 @@ const CAM = {
   7: 'Medium-wide shot, slightly high angle, inside the cottage: everyone is spread around the room joining in together; the child is not in the center.',
   8: 'Wide shot from behind: the child seen from the back walking away along a winding forest path toward a glowing sunset, small in the lower-left third of the frame, trees framing both sides.',
 };
-const SYSTEM = `You are the story editor of an interactive "Little Red Riding Hood" picture book for children aged 3-8 and their parents. The story script is fixed by the author; follow the "must happen" line for the current page exactly and use the child's idea only for the part the line says it decides. If the idea is off-theme, turn it into a fun, kind detail. Anything violent, scary, sexual or unsafe must be gently rewritten into something kind or funny. Reuse the exact same appearance description for recurring characters (the story so far lists them). Think like a picture-book director: use the camera suggestion and adapt it; never place the child in the center of every picture. Output JSON only: caption_zh = a very short Traditional Chinese label (at most 12 characters, it is not shown); scene_en = one or two English sentences describing the action and expressions in the picture, naming every object, animal and character concretely; camera_en = one English sentence about shot, angle and composition; cast_en = array of short English appearance descriptions of every non-protagonist character present on this page (empty array if none; the helper and wolf and grandmother each need a description). Never put text, letters, signs or speech bubbles in the picture. Only the main child wears a red hood; every other character must have different clothes and look clearly different from the child. When these characters appear, use these exact descriptions: mother = ${MOTHER}; grandmother = ${GRANDMA}; hunter = ${HUNTER}; wolf = ${WOLF} (unless the child described the wolf differently).`;
+const SYSTEM = `You are the story editor of an interactive "Little Red Riding Hood" picture book for children aged 3-8 and their parents. The story script is fixed by the author; follow the "must happen" line for the current page exactly and use the child's idea only for the part the line says it decides. If the idea is off-theme, turn it into a fun, kind detail. Anything violent, scary, sexual or unsafe must be gently rewritten into something kind or funny. Reuse the exact same appearance description for recurring characters (the story so far lists them). Think like a picture-book director: use the camera suggestion and adapt it; never place the child in the center of every picture. Output JSON only: caption_zh = a very short Traditional Chinese label (at most 12 characters, it is not shown); scene_en = one or two English sentences describing the action and expressions in the picture, naming every object, animal and character concretely; camera_en = one English sentence about shot, angle and composition; cast_en = array of short English appearance descriptions of every non-protagonist character present on this page (empty array if none; the helper and wolf and grandmother each need a description). Never put text, letters, signs, speech bubbles or thought bubbles in the picture; show thoughts and words only through facial expressions and body language, and never use the words 'thinking' or 'says' in scene_en. Only the main child wears a red hood; every other character must have different clothes and look clearly different from the child. When these characters appear, use these exact descriptions: mother = ${MOTHER}; grandmother = ${GRANDMA}; hunter = ${HUNTER}; wolf = ${WOLF} (unless the child described the wolf differently).`;
 const clip = (s, n) => String(s || '').slice(0, n);
 
 async function viaGemini(userMsg) {
@@ -48,7 +48,7 @@ async function viaGemini(userMsg) {
 async function callGemini(model, userMsg) {
   const gr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
-    signal: AbortSignal.timeout(12000),
+    signal: AbortSignal.timeout(20000),
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },
@@ -91,29 +91,77 @@ const KW = [
 ];
 const NONCHAR = ['many colorful flowers', 'colorful butterflies', 'a big rainbow in the sky', 'a cake'];
 const noSpeech = (t) => t.replace(/[，,。\s]*(他|牠|它|她)?對.{0,8}(說|講|問|喊|叫).*$/, '');
-async function fallback(page, said, cast) {
-  const z0 = BAD.test(said) ? '' : said.replace(/[。！!？?]+$/, '');
-  const z = page === 3 ? (noSpeech(z0) || z0) : z0;
-  const zs = z.replace(/^(小紅帽|她|他|牠)[，,]?/, '');
-  const x = z ? (await tr(z)).replace(/["“”‘’]/g, '') : '';
+// ===== 自由回答：用 Claude 快速模型把小朋友的話變成精準的畫面描述 =====
+async function viaClaude(userMsg) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    signal: AbortSignal.timeout(9000),
+    headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: process.env.CLAUDE_MODEL || 'claude-haiku-5-5',
+      max_tokens: 500,
+      temperature: 0.7,
+      system: SYSTEM + ' Reply with one JSON object only.',
+      messages: [{ role: 'user', content: userMsg }, { role: 'assistant', content: '{' }],
+    }),
+  }).then((x) => x.json());
+  if (r.error) throw new Error(`Claude ${r.error.type || ''} ${r.error.message || ''}`);
+  const txt = '{' + ((r.content && r.content[0] && r.content[0].text) || '');
+  const o = JSON.parse(txt.slice(0, txt.lastIndexOf('}') + 1));
+  if (!o.scene_en) throw new Error('Claude 回覆不完整');
+  if (!o.caption_zh) o.caption_zh = '';
+  return o;
+}
+const CHIPTEXT = {
+  3: ['好香的花，可以送我一朵嗎？', '小紅帽，你要去哪裡呀？', '我肚子好餓喔！', '我們來玩遊戲吧！'],
+  4: ['想先跑到奶奶家', '想跟小紅帽交朋友', '想把食物都吃光光', '想躲起來嚇一嚇她'],
+  5: ['媽媽', '獵人叔叔', '森林裡的小動物', '外星人朋友'],
+  6: ['開生日派對', '一起烤蛋糕', '玩捉迷藏', '跳舞唱歌'],
+  7: ['開生日派對', '一起烤蛋糕', '玩捉迷藏', '跳舞唱歌'],
+};
+const isChip = (page, said) => (CHIPTEXT[page] || []).includes(String(said || '').trim());
+
+// ===== 快速模式（預設）：不呼叫 AI 語言模型，用固定描述 + 常見選項對照 + 免費翻譯（只在自由回答時才用）=====
+const CHIP = {
+  3: [[/花/, 'friendly and polite, smiling and pointing at the flowers as if asking for one'], [/哪|去/, 'curious, tilting his head as if asking where she is going'], [/餓|吃/, 'hungry, holding his belly with a sad puppy face'], [/玩|遊戲/, 'playful, arms spread wide as if inviting her to play']],
+  4: [[/奶奶|外婆|跑|趕|先/, 'sly, looking toward a shortcut path that leads to a cottage in the distance'], [/朋友|交/, 'smiling warmly, tail wagging, wanting to be her friend'], [/吃|食物|餓/, 'eyeing the basket hungrily and licking his lips'], [/躲|嚇|藏/, 'crouching behind a bush with a playful mischievous grin']],
+  6: [[/生日|派對|慶祝/, 'having a birthday party with a cake, balloons and party hats'], [/蛋糕|烤|烘焙|餅乾/, 'baking a cake together in the cozy kitchen'], [/捉迷藏|躲/, 'playing hide and seek around the room'], [/跳舞|唱歌|音樂|唱|跳/, 'dancing and singing together']],
+};
+const pick = (page, z) => { const m = (CHIP[page] || []).find(([re]) => re.test(z)); return m ? m[1] : ''; };
+async function fallback(page, said, cast, helperCast) {
+  const z = BAD.test(said) ? '' : said.replace(/[。！!？?]+$/, '');
+  const wolf = cast.find((c) => /wolf/i.test(c)) || WOLF;
+  const soft = ' Keep everything gentle, friendly and child-friendly.';
   const extra = KW.filter(([re]) => re.test(z)).map(([, d]) => d);
   const people = extra.filter((d) => !NONCHAR.includes(d));
-  const withExtra = (t) => t + (extra.length ? '. Clearly shown in the picture: ' + extra.join('; ') : '');
-  const wolf = cast.find((c) => /wolf/i.test(c)) || WOLF;
-  const everyone = cast.length ? cast : [wolf, GRANDMA];
-  const soft = ' Keep everything gentle, friendly and child-friendly.';
-  const T = {
-    2: [`at the wooden door of a cozy cottage, ${MOTHER} hands the child a wicker basket of treats and speaks to her kindly, the child listens and smiles`, '', [MOTHER]],
-    3: [withExtra(`in the forest the child picks flowers while a wolf walks toward her, looking friendly and curious as if he is talking to her, not scary`), '', [`a cartoon wolf, ${x ? 'gray fur' : 'friendly face, gray fur'}`]],
-    4: [withExtra(`the child hands some food from her basket to the wolf and waves goodbye; the wolf stays behind with a thoughtful face, thinking: ${x || 'what to do next'}`), '', [wolf]],
-    5: [withExtra(`the child stands at the wide open front door of grandmother's cottage looking worried; ${x ? 'her helper, ' + x + ',' : 'a kind helper'} stands right beside her`), '', people.length ? people : [x ? `a friendly helper: ${x}` : 'a kind small helper']],
-    6: [`inside the cottage, the wolf and grandmother are happily ${x || 'having fun together'} while the child and her helper watch in surprise`, '', [...new Set([...cast.filter((c) => !/wolf/i.test(c) && !/grandmother/i.test(c)), wolf, GRANDMA])]],
-    7: [`inside the cottage, ${everyone.join('; ')} all happily ${x || 'play together'} with the child, laughing`, '', everyone],
-    8: ['the main child seen from behind, walking away along the forest path toward the sunset, carrying the basket', '', []],
-  }[page];
-  return { scene_en: T[0] + '.' + soft, camera_en: CAM[page], caption_zh: T[1], cast_en: T[2] };
+  let helper = (helperCast && helperCast.length) ? helperCast : [];
+  let scene, chars;
+  if (page === 2) { scene = `at the wooden door of a cozy cottage, ${MOTHER} hands the child a wicker basket of treats and speaks to her kindly, the child listens and smiles`; chars = [MOTHER]; }
+  else if (page === 3) {
+    const mood = pick(3, z) || 'friendly and curious';
+    scene = `in the forest the child picks flowers while a wolf walks toward her, the wolf looks ${mood}, not scary`; chars = [WOLF];
+  } else if (page === 4) {
+    const mood = pick(4, z) || 'thoughtful and a little sly';
+    scene = `the child hands some food from her basket to the wolf and waves goodbye; the wolf stays behind, he looks ${mood}`; chars = [wolf];
+  } else if (page === 5) {
+    let h = people.length ? people : [];
+    if (!h.length && z) { const t = await tr(z); h = [t ? `a friendly helper: ${t.replace(/["“”‘’]/g, '')}` : 'a kind small helper']; }
+    if (!h.length) h = ['a kind small helper'];
+    scene = `the child stands at the wide open front door of grandmother's cottage looking worried, her helper stands right beside her`; chars = h;
+  } else if (page === 6 || page === 7) {
+    let act = pick(6, z);
+    if (!act && z) { const t = await tr(z); act = t ? t.replace(/["“”‘’]/g, '') : ''; }
+    act = act || 'having fun together';
+    if (!helper.length) helper = people.length ? people : [];
+    chars = [...new Set([...helper, wolf, GRANDMA])];
+    scene = page === 6
+      ? `inside the cozy cottage, the wolf and grandmother are happily ${act}, while the child and her helper stand at the door watching in surprise`
+      : `inside the cozy cottage, ${chars.join('; ')} and the child all happily join in, ${act}, laughing together`;
+  } else { scene = 'the main child seen from behind, walking away along the forest path toward the sunset, carrying the basket'; chars = []; }
+  return { scene_en: scene + '.' + soft, camera_en: CAM[page], caption_zh: '', cast_en: chars };
 }
 
+const normCode = s => String(s||'').normalize('NFKC').trim().toLowerCase();
 module.exports = async (req, res) => {
   // 圖片代理（GET）
   if (req.method === 'GET') {
@@ -130,7 +178,7 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!process.env.FAL_KEY) return res.status(500).json({ error: '伺服器還沒設定 FAL_KEY' });
   const code = process.env.ACCESS_CODE;
-  if (code && req.headers['x-access-code'] !== code) return res.status(401).json({ error: '需要展場通行碼' });
+  if (code && normCode(req.headers['x-access-code']) !== normCode(code)) return res.status(401).json({ error: '通行碼不對（伺服器收到 '+String(req.headers['x-access-code']||'').length+' 個字，應為 '+String(code).trim().length+' 個字）' });
   let b = req.body;
   if (typeof b === 'string') { try { b = JSON.parse(b); } catch { b = {}; } }
   b = b || {};
@@ -139,19 +187,20 @@ module.exports = async (req, res) => {
 
   const said = clip(b.said, 200);
   const hist = (Array.isArray(b.history) ? b.history : []).slice(0, 7).map((h) => ({ p: Number(h.p), caption: clip(h.caption, 200), said: clip(h.said, 100), cast: (Array.isArray(h.cast) ? h.cast : []).slice(0, 5).map((c) => clip(c, 160)) }));
-  const cast = [...new Set(hist.flatMap((h) => h.cast))].slice(0, 8);
+  const cast = [...new Set(hist.filter((h) => h.p >= 3).flatMap((h) => h.cast))].slice(0, 8);
   const userMsg =
     `Page ${page} of 8.\nMust happen: ${SPEC[page]}\nCamera suggestion: ${CAM[page]}\nChild's idea: ${said || '(none, you decide)'}\n` +
     `Story so far:\n${hist.map((h) => `Page ${h.p}: ${h.caption}${h.said ? ' (child said: ' + h.said + ')' : ''}`).join('\n') || '(nothing yet)'}\n` +
     `Characters so far (reuse these exact descriptions): ${cast.join(' | ') || '(none)'}` +
     (page === 8 ? '\nInclude ALL characters so far in the final group picture.' : '');
 
+  const T0 = Date.now();
   try {
     let sc = null, mode = 'gemini', gerr = '';
     if (page === 8) { mode = 'fixed'; sc = { caption_zh: '小紅帽開心地走向回家的路。', scene_en: SPEC[8].replace(/^Final quiet picture: /, '').replace(/\.$/, '') + '. Gentle and peaceful', camera_en: CAM[8], cast_en: [] }; }
-    else if (!process.env.GEMINI_API_KEY) gerr = '沒有設定 GEMINI_API_KEY';
-    else { try { sc = await viaGemini(userMsg); } catch (e) { gerr = clip(e.message || e, 160); } }
-    if (!sc) { mode = 'mymemory'; sc = await fallback(page, said, cast); }
+    else if (said && !isChip(page, said) && process.env.ANTHROPIC_API_KEY) { try { sc = await viaClaude(userMsg); mode = 'claude'; } catch (e) { gerr = clip(e.message || e, 160); } }
+    else if (process.env.USE_GEMINI === '1' && process.env.GEMINI_API_KEY) { try { sc = await viaGemini(userMsg); } catch (e) { gerr = clip(e.message || e, 160); } }
+    if (!sc) { mode = 'rules'; sc = await fallback(page, said, cast, (hist.find((h) => h.p === 5) || {}).cast); }
     const chars = (Array.isArray(sc.cast_en) ? sc.cast_en : []).slice(0, 5).map((c) => clip(c, 160));
     // 沿用 Playground 實測有效的簡潔寫法
     const prompt =
@@ -161,12 +210,12 @@ module.exports = async (req, res) => {
       (chars.length
         ? `Add only ${chars.join('; ')} as other characters, clearly different from the child, with no red hood, and nobody else. `
         : 'No other characters. ') +
-      `Same crayon drawing style, no text, no letters, no speech bubbles.`;
+      `Same crayon drawing style, no text, no letters, no speech bubbles, no thought bubbles.`;
     let fr, fstatus = 0;
     try {
       const resp = await fetch(FAL_URL, {
         method: 'POST',
-        signal: AbortSignal.timeout(48000),
+        signal: AbortSignal.timeout(Math.max(15000, 56000 - (Date.now() - T0))),
         headers: { Authorization: `Key ${process.env.FAL_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, image_url: b.image, aspect_ratio: '3:4', output_format: 'jpeg' }),
       });
