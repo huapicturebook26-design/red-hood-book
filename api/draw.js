@@ -1,6 +1,6 @@
 // 故事頁生成：Gemini（或備用的 MyMemory）把孩子的話織進小紅帽的故事框架，再由 Kontext 用同一個角色畫出這一頁
 // 另外：GET /api/page?u=圖片網址 兼任圖片代理，供列印頁使用（不需要另外的 img.js）
-const VERSION = 'draw.js v22';
+const VERSION = 'draw.js v23';
 const FAL_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const FAL_MULTI = 'https://fal.run/fal-ai/flux-pro/kontext/multi';
 const MODELS = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))];
@@ -11,7 +11,7 @@ const okHost = (u) => { try { const x = new URL(u); return x.protocol === 'https
 const MOTHER = "the child's mother, a tall adult woman with brown hair in a bun, wearing a green dress and a white apron, no hood";
 const GRANDMA = 'the grandmother, a small elderly woman with white hair in a bun, round glasses, a gray shawl and a purple dress, no hood';
 const HUNTER = 'a kind hunter, a tall adult man with a brown beard, a green hat and a brown coat';
-const WOLF = 'a gray cartoon wolf with a friendly face';
+const WOLF = 'an anthropomorphic gray wolf character who stands and walks upright like a person on two legs, with exactly two arms and two paw-like hands, a friendly wolf face with pointed ears and a muzzle, soft gray fur, a fluffy bushy tail, wearing a simple brown vest';
 
 // 每一頁「一定要發生的事」（依作者的腳本）
 const SPEC = {
@@ -72,7 +72,7 @@ const ENV = {
   8: 'glowing orange sunset, long soft shadows, fireflies beginning to appear',
 };
 
-const SYSTEM = `You are the story editor of an interactive "Little Red Riding Hood" picture book for children aged 3-8 and their parents. The story script is fixed by the author; follow the "must happen" line for the current page exactly and use the child's idea only for the part the line says it decides. If the idea is off-theme, turn it into a fun, kind detail. Never draw an existing franchise, game, film or brand character: if the idea mentions one, use only the looks the child described to create an original creature. Anything violent, scary, sexual or unsafe must be gently rewritten into something kind or funny. Reuse the exact same appearance description for recurring characters (the story so far lists them). Think like a picture-book director: choose or blend one of the camera options so that it suits the child's idea (a huge thing needs a wide shot, a feeling needs a close-up) and is clearly different from the cameras used on earlier pages; never place the child in the center of every picture. Make every picture a rich, detailed storybook scene: in scene_en name three or four concrete background and foreground details (props, plants, animals, weather, light) taken from the environment hint and from the child's idea, and give each character a different place and size in the frame. Output JSON only: caption_zh = a very short Traditional Chinese label (at most 12 characters, it is not shown); scene_en = two or three English sentences describing the action and expressions in the picture, naming every object, animal and character concretely; camera_en = one English sentence about shot, angle and composition; cast_en = array of short English appearance descriptions of every non-protagonist character present on this page (empty array if none; the helper and wolf and grandmother each need a description). Never put text, letters, signs, speech bubbles or thought bubbles in the picture; show thoughts and words only through facial expressions and body language, and never use the words 'thinking' or 'says' in scene_en. Only the main child wears a red hood; every other character must have different clothes and look clearly different from the child. When these characters appear, use these exact descriptions: mother = ${MOTHER}; grandmother = ${GRANDMA}; hunter = ${HUNTER}; wolf = ${WOLF} (unless the child described the wolf differently).`;
+const SYSTEM = `You are the story editor of an interactive "Little Red Riding Hood" picture book for children aged 3-8 and their parents. The story script is fixed by the author; follow the "must happen" line for the current page exactly and use the child's idea only for the part the line says it decides. If the idea is off-theme, turn it into a fun, kind detail. Never draw an existing franchise, game, film or brand character: if the idea mentions one, use only the looks the child described to create an original creature. Anything violent, scary, sexual or unsafe must be gently rewritten into something kind or funny. Reuse the exact same appearance description for recurring characters (the story so far lists them). Think like a picture-book director: choose or blend one of the camera options so that it suits the child's idea (a huge thing needs a wide shot, a feeling needs a close-up) and is clearly different from the cameras used on earlier pages; never place the child in the center of every picture. Make every picture a rich, detailed storybook scene: in scene_en name three or four concrete background and foreground details (props, plants, animals, weather, light) taken from the environment hint and from the child's idea, and give each character a different place and size in the frame. PRECISION RULE: when the child names a specific activity, sport, game, job, object, animal, food, vehicle or place (for example rock climbing, playing poker, ice skating, cooking hot pot, a dentist), use the exact English term and spell out in action_en what it concretely looks like: the signature equipment and props, the typical body poses and hand/foot positions, and the usual setting. The activity must be clearly visible and actively happening in the foreground, performed by the characters the page says, with their bodies in the real action pose (never just standing around with the item in the background). Every character has exactly two arms, two hands and two legs, no extra limbs. Output JSON only: caption_zh = a very short Traditional Chinese label (at most 12 characters, it is not shown); scene_en = two or three English sentences describing the action and expressions in the picture, naming every object, animal and character concretely; camera_en = one English sentence about shot, angle and composition; action_en = two or three English sentences describing exactly what the main action looks like, with equipment, poses and setting (empty string if the page has no special action); cast_en = array of short English appearance descriptions of every non-protagonist character present on this page (empty array if none; the helper and wolf and grandmother each need a description). Never put text, letters, signs, speech bubbles or thought bubbles in the picture; show thoughts and words only through facial expressions and body language, and never use the words 'thinking' or 'says' in scene_en. Only the main child wears a red hood; every other character must have different clothes and look clearly different from the child. When these characters appear, use these exact descriptions: mother = ${MOTHER}; grandmother = ${GRANDMA}; hunter = ${HUNTER}; wolf = ${WOLF} (unless the child described the wolf differently).`;
 const clip = (s, n) => String(s || '').slice(0, n);
 
 async function viaGemini(userMsg) {
@@ -134,7 +134,7 @@ const noSpeech = (t) => t.replace(/[，,。\s]*(他|牠|它|她)?對.{0,8}(說|�
 // ===== 自由回答：用 Claude 快速模型把小朋友的話變成精準的畫面描述 =====
 async function viaClaude(userMsg) {
   const sys = SYSTEM + ' Also include slot_zh: only for page 5, the helper the child chose as a short Traditional Chinese noun phrase with no verbs (e.g. 太陽跟月亮, 一隻恐龍); only for pages 6 and 7, the activity as a short Traditional Chinese verb phrase that fits right after 「狼和奶奶在」 (e.g. 畫萬聖節的南瓜、開萬聖節派對); gently fix obvious speech-recognition homophone mistakes; empty string for other pages. Reply with one JSON object only.';
-  const content = userMsg + '\n\nReply with ONE JSON object only (keys: caption_zh, scene_en, camera_en, cast_en, slot_zh). No markdown, no extra text.';
+  const content = userMsg + '\n\nReply with ONE JSON object only (keys: caption_zh, scene_en, camera_en, action_en, cast_en, slot_zh). No markdown, no extra text.';
   const call = async (extra, max) => fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     signal: AbortSignal.timeout(14000),
@@ -259,11 +259,12 @@ module.exports = async (req, res) => {
       `Do not copy the pose, framing, zoom or camera angle of the input image${multi ? 's' : ''}. ` +
       (multi ? `Image 1 shows the main child: keep the girl in the red hooded cape exactly the same (face, hair, skin tone, outfit). ${refNote.join(' ')} ` : `Keep the child in the red hooded cape exactly the same (face, hair, skin tone, outfit). `) +
       `New scene: ${clip(sc.scene_en, 600).replace(/[.\s]+$/, '')}. ` +
-      (ENV[page] ? `Rich detailed background: ${ENV[page]}. ` : '') +
+      (sc.action_en ? `MAIN ACTION, drawn clearly in the foreground as the focus of the picture: ${clip(sc.action_en, 500).replace(/[.\s]+$/, '')}. ` : '') +
+      (ENV[page] ? `Rich detailed background, adapted so it fits the main action: ${ENV[page]}. ` : '') +
       (chars.length
         ? `Add only ${chars.join('; ')} as other characters, each clearly visible and clearly different from the child, with no red hood, and nobody else. `
         : 'No other characters. ') +
-      `Same crayon drawing style, no text, no letters, no speech bubbles, no thought bubbles.`;
+      `Every character has exactly two arms, two hands and two legs, no extra limbs. Same crayon drawing style, no text, no letters, no speech bubbles, no thought bubbles.`;
     const callFal = async (p, tol, useRefs = true) => {
       const body = { prompt: p, aspect_ratio: '3:4', output_format: 'jpeg', ...(tol ? { safety_tolerance: tol } : {}) };
       const m = useRefs && multi;
