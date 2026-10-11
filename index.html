@@ -149,7 +149,8 @@ const textFor=p=>{const t=TXT[p];return typeof t==='function'?t():t};
 const capFor=p=>(RES[p]&&said[p])?RES[p](said[p]):({2:'媽媽說注意安全，路上要小心喔～',7:'太好了～大家一起同樂吧！',8:'夕陽下，小紅帽走向回家的路。'}[p]||'');
 const MAXROUNDS=2;
 let mode='design',ans={basket:[]},step=0,talk=false,rec=null,rounds=0,chosen=null,phase='q'; // phase: q|ready|wait|cands
-let book=null,st={},said={},node=0,pending='',cur=1,timer=null,tcur=0,chain=Promise.resolve(),flipping=false,wt=null,srvVer='',lastMode='',lastErr='';
+const FAMOUS=/皮克敏|寶可夢|神奇寶貝|皮卡丘|比卡超|伊布|噴火龍|小火龍|傑尼龜|妙蛙種子|妙蛙花|胖丁|卡比獸|耿鬼|超夢|夢幻|快龍|嘟嘟|獵魔女團|魯米|米拉|若伊|三麗鷗|Hello ?Kitty|hello ?kitty|凱蒂貓|美樂蒂|酷洛米|庫洛米|大耳狗|玉桂狗|布丁狗|帕恰狗|雙子星|米奇|米妮|米老鼠|唐老鴨|高飛|布魯托|艾莎|安娜|雪寶|史迪奇|小熊維尼|維尼|跳跳虎|小美人魚|愛麗兒|白雪公主|灰姑娘|貝兒|茉莉公主|辛巴|巴斯光年|胡迪|毛怪|大眼仔|小小兵|佩佩豬|巧虎|哆啦A夢|哆啦a夢|小叮噹|蠟筆小新|麵包超人|冰雪奇緣|迪士尼|皮克斯|馬力歐|瑪利歐|路易吉|庫巴|索尼克|海綿寶寶|派大星|汪汪隊|鬼滅/;
+let lookStep=false,lookName='',look={},saidFx={},book=null,st={},said={},node=0,pending='',cur=1,timer=null,tcur=0,chain=Promise.resolve(),flipping=false,wt=null,srvVer='',lastMode='',lastErr='';
 const find=(k,id)=>Q.find(q=>q.k===k).o.find(o=>o.id===id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function say(t){if(!talk||!window.speechSynthesis)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='zh-TW';u.rate=.9;speechSynthesis.speak(u)}
@@ -283,9 +284,13 @@ const nodeFor=p=>NODES.find(n=>n.p===p);
 function askHtml(){
  if(mode!=='story'&&mode!=='read')return '';
  const nd=nodeFor(cur);if(!nd)return '';
- if(said[cur])return `<div class="ask askbox res"><h2>${esc(RES[cur](said[cur]))}</h2></div>`;
+ if(said[cur]&&!(lookStep&&NODES[node]&&NODES[node].p===cur))return `<div class="ask askbox res"><h2>${esc(RES[cur](said[cur]))}</h2></div>`;
  if(mode!=='story'||node>=NODES.length||NODES[node].p!==cur||st[cur]!=='idle')return '';
  const n=NODES[node];
+ if(lookStep)return `<div class="ask askbox"><h2>哇，「${esc(lookName)}」！它長什麼樣子呢？</h2><div class="small" style="text-align:left">說說它的顏色、形狀，或身體和臉的樣子</div><div class="qc"><button data-act="chip">你來畫畫看</button></div>
+ <div class="heard" id="said" style="margin:.1em 0">${pending?`我聽到：「${esc(pending)}」`:''}</div>
+ <div class="bar"><button class="mic" id="smic" data-act="smic"><span>🎤</span>說話</button><button class="btn say" data-act="sq"><span>👂</span><small>聽問題</small></button><button class="btn go" id="sok" data-act="sok" ${pending?'':'disabled'}>就這樣！</button></div>
+ <input id="typed" placeholder="也可以直接打字" value="${esc(pending)}"></div>`;
  return `<div class="ask askbox"><h2>${n.q}</h2><div class="qc">${n.c.map(c=>`<button data-act="chip">${c}</button>`).join('')}</div>
  <div class="heard" id="said" style="margin:.1em 0">${pending?`我聽到：「${esc(pending)}」`:''}</div>
  <div class="bar"><button class="mic" id="smic" data-act="smic"><span>🎤</span>說話</button><button class="btn say" data-act="sq"><span>👂</span><small>聽問題</small></button><button class="btn go" id="sok" data-act="sok" ${pending?'':'disabled'}>就這樣！</button></div>
@@ -317,13 +322,13 @@ function go(n,dir){return turn(()=>spreadHtml(n),dir||(n>=cur?1:-1))}
 async function genPage(p,tryn){
  tryn=tryn||1;
  st[p]='busy';if(cur===p){paintImg();paintCap()}
- const hist=book.pages.slice(0,p-2).map((x,i)=>x&&{p:i+2,caption:textFor(i+2),said:said[i+2]||'',cast:x.cast}).filter(Boolean);
+ const hist=book.pages.slice(0,p-2).map((x,i)=>x&&{p:i+2,caption:textFor(i+2),said:saidFx[i+2]||said[i+2]||'',cast:x.cast,cam:x.cam}).filter(Boolean);
  try{
-  let r=await fetch('/api/draw',{method:'POST',headers:hdr(),body:JSON.stringify({image:book.cover,page:p,said:said[p]||'',history:hist})});
-  if(r.status===401){const c=prompt('請輸入展場通行碼');if(c){sessionStorage.setItem('code',c.trim());r=await fetch('/api/draw',{method:'POST',headers:hdr(),body:JSON.stringify({image:book.cover,page:p,said:said[p]||'',history:hist})})}}
+  let r=await fetch('/api/draw',{method:'POST',headers:hdr(),body:JSON.stringify({image:book.cover,page:p,said:saidFx[p]||said[p]||'',history:hist})});
+  if(r.status===401){const c=prompt('請輸入展場通行碼');if(c){sessionStorage.setItem('code',c.trim());r=await fetch('/api/draw',{method:'POST',headers:hdr(),body:JSON.stringify({image:book.cover,page:p,said:saidFx[p]||said[p]||'',history:hist})})}}
   const d=await readJson(r);
   if(!r.ok||!d.image)throw new Error((d.error||'失敗')+(d.detail?' '+JSON.stringify(d.detail).slice(0,300):''));
-  if(d.slot&&(p===5||p===6))slotv[p]=d.slot;book.pages[p-2]={image:d.image,caption:capFor(p),cast:d.cast};st[p]='ok';
+  if(d.slot&&(p===5||p===6)&&!(look[p]!==undefined&&saidFx[p]!==said[p]))slotv[p]=d.slot;book.pages[p-2]={image:d.image,caption:capFor(p),cast:d.cast,cam:d.cam};st[p]='ok';
   if(d.mode!=='fixed'){lastMode=d.mode;lastErr=d.gerr||''}
   localStorage.setItem('rh_book',JSON.stringify(book));
  }catch(e){
@@ -334,7 +339,7 @@ async function genPage(p,tryn){
 }
 const queue=p=>{st[p]='busy';chain=chain.then(()=>genPage(p))};
 function startStory(){
- mode='story';book={cover:chosen,pages:Array(7).fill(null)};st={};said={};for(const k in slotv)delete slotv[k];node=0;pending='';cur=1;chain=Promise.resolve();
+ mode='story';book={cover:chosen,pages:Array(7).fill(null)};st={};said={};saidFx={};look={};lookStep=false;for(const k in slotv)delete slotv[k];node=0;pending='';cur=1;chain=Promise.resolve();
  try{localStorage.setItem('rh_book',JSON.stringify(book))}catch(_){}
  srvVer='檢查中';fetch('/api/draw').then(r=>r.text()).then(t=>{srvVer=/^draw\.js v\d+/.test(t)?t:'⚠️ 找不到最新的 api/draw.js，請上傳到 GitHub 的 api 資料夾';paintStat()}).catch(()=>{srvVer='?'});
  $('mimg').src=chosen;
@@ -344,10 +349,17 @@ function startStory(){
  say('這是你的小紅帽！我們一起來編故事吧。');
 }
 function setSaid(t){pending=t.trim();const s=$('said');if(s)s.textContent=pending?`我聽到：「${pending}」`:'';const k=$('sok');if(k)k.disabled=!pending;const i=$('typed');if(i&&i.value!==pending&&document.activeElement!==i)i.value=pending}
+function fx(p,t,lk){const m=t.match(FAMOUS);if(!m)return t;const g=(lk||'').trim();return t.replace(new RegExp(FAMOUS.source,'g'),g?`一隻小生物（外觀：${g}）`:'一隻可愛的原創小生物')}
 function answer(){
- if(!pending)return;const n=NODES[node];said[n.p]=pending;
- if(n.p===6){said[7]=pending;queue(6);queue(7);queue(8)}else queue(n.p);
- node++;pending='';
+ if(!pending)return;const n=NODES[node];
+ if(lookStep){lookStep=false;const lk=/^(你來畫畫看|不知道|你決定)/.test(pending)?'':pending;look[n.p]=lk;saidFx[n.p]=fx(n.p,said[n.p],lk);pending='';finish(n)}
+ else{said[n.p]=pending;saidFx[n.p]=pending;
+  if((n.p===5||n.p===6)&&FAMOUS.test(pending)){lookStep=true;lookName=pending.match(FAMOUS)[0];pending='';const a=$('L').querySelector('.askbox');if(a)a.outerHTML=askHtml();say('哇，'+lookName+'！它長什麼樣子呢？');return}
+  pending='';finish(n)}
+}
+function finish(n){
+ if(n.p===6){said[7]=said[6];saidFx[7]=saidFx[6];queue(6);queue(7);queue(8)}else queue(n.p);
+ node++;
  const a=$('L').querySelector('.askbox');if(a)a.outerHTML=askHtml();
  paintCap();paintImg();
  if(node<NODES.length)say(NODES[node].q);
@@ -400,7 +412,7 @@ const A={
  chip:b=>{talk=true;setSaid(b.textContent)},
  smic:()=>listen('smic','said',(a,f)=>setSaid(f)),
  sok:()=>answer(),
- sq:()=>{talk=true;if(node<NODES.length)say(NODES[node].q)},
+ sq:()=>{talk=true;if(lookStep)say('哇，'+lookName+'！它長什麼樣子呢？');else if(node<NODES.length)say(NODES[node].q)},
  retry:b=>{const p=+b.dataset.p;st[p]='busy';paintImg();chain=chain.then(()=>genPage(p))},
  stnext:()=>{if(!flipping&&mode==='story')go(cur+1,1).then(()=>{const n=NODES[node];if(n&&n.p===cur&&st[cur]==='idle')say(n.q)})},stprev:()=>{if(!flipping&&mode==='story')go(cur-1,-1)},bookgo:()=>{if(mode==='story'&&allDone())finale()},
  nextp:()=>nav(cur+1),prevp:()=>nav(cur-1),lastp:()=>nav(9),
