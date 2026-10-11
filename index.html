@@ -135,10 +135,16 @@ const TXT={
  3:'小紅帽來到森林裡面，想要摘一些花朵帶去探望奶奶，突然看見前面走來一隻狼。',
  4:'小紅帽給狼一些提籃裡的食物，並告訴他要自己去探望奶奶。\n小紅帽與大野狼道別。',
  5:'小紅帽到奶奶家門口，卻發現很不對勁！\n門居然是開著的！',
- 6:()=>`小紅帽和${said[5]||'朋友'}進到屋子裡，看見了狼和奶奶，卻發現事情和他們想的不一樣……`,
- 7:()=>`原來狼和奶奶在${said[6]||'玩遊戲'}。\n太好了～大家一起同樂吧！`,
+ 6:()=>`小紅帽和${val(5)||'朋友'}進到屋子裡，看見了狼和奶奶，卻發現事情和他們想的不一樣……`,
+ 7:()=>`原來狼和奶奶在${val(6)||'玩遊戲'}。\n太好了～大家一起同樂吧！`,
  8:'大家開開心心地度過了一天。\n夕陽下，小紅帽輕輕走向回家的路。'};
-const RES={3:a=>`狼對著小紅帽說：「${a}」`,4:a=>`狼心裡想著：${a}`,5:a=>`小紅帽決定：「我要找${a}來幫忙！」`,6:a=>`狼對著小紅帽說：「我們在${a}」`};
+const slotv={};
+const clean=(p,a)=>{a=String(a||'').trim().replace(/[。！!？?～~，,\s]+$/,'');
+ if(p===5){a=a.replace(/^(我要|我想要|我想|我就|我們要|要|請|可以|去)?(找|叫|請|去找)+/,'').replace(/(來|去)?(幫幫忙|幫忙|幫我們|幫我|幫幫我)[了啦喔呀吧耶]*$/,'').replace(/^[的]/,'')}
+ else if(p===6||p===7){a=a.replace(/^(他們|牠們|她們|它們|我們|狼和奶奶|奶奶和狼|狼跟奶奶|奶奶跟狼|大家)?(都|正|正在|在|一起|想要|想|要)*/,'').replace(/[喔啦耶呢啊呀吧]+$/,'')}
+ return a||String(a)};
+const val=p=>{const q=p===7?6:p;return slotv[q]||clean(q,said[q])};
+const RES={3:a=>`狼對著小紅帽說：「${a}」`,4:a=>`狼心裡想著：${a}`,5:a=>`小紅帽決定：「我要找${val(5)}來幫忙！」`,6:a=>`狼對著小紅帽說：「我們在${val(6)}」`};
 const textFor=p=>{const t=TXT[p];return typeof t==='function'?t():t};
 const capFor=p=>(RES[p]&&said[p])?RES[p](said[p]):({2:'媽媽說注意安全，路上要小心喔～',7:'太好了～大家一起同樂吧！',8:'夕陽下，小紅帽走向回家的路。'}[p]||'');
 const MAXROUNDS=2;
@@ -317,7 +323,7 @@ async function genPage(p,tryn){
   if(r.status===401){const c=prompt('請輸入展場通行碼');if(c){sessionStorage.setItem('code',c.trim());r=await fetch('/api/draw',{method:'POST',headers:hdr(),body:JSON.stringify({image:book.cover,page:p,said:said[p]||'',history:hist})})}}
   const d=await readJson(r);
   if(!r.ok||!d.image)throw new Error((d.error||'失敗')+(d.detail?' '+JSON.stringify(d.detail).slice(0,300):''));
-  book.pages[p-2]={image:d.image,caption:capFor(p),cast:d.cast};st[p]='ok';
+  if(d.slot&&(p===5||p===6))slotv[p]=d.slot;book.pages[p-2]={image:d.image,caption:capFor(p),cast:d.cast};st[p]='ok';
   if(d.mode!=='fixed'){lastMode=d.mode;lastErr=d.gerr||''}
   localStorage.setItem('rh_book',JSON.stringify(book));
  }catch(e){
@@ -328,7 +334,7 @@ async function genPage(p,tryn){
 }
 const queue=p=>{st[p]='busy';chain=chain.then(()=>genPage(p))};
 function startStory(){
- mode='story';book={cover:chosen,pages:Array(7).fill(null)};st={};said={};node=0;pending='';cur=1;chain=Promise.resolve();
+ mode='story';book={cover:chosen,pages:Array(7).fill(null)};st={};said={};for(const k in slotv)delete slotv[k];node=0;pending='';cur=1;chain=Promise.resolve();
  try{localStorage.setItem('rh_book',JSON.stringify(book))}catch(_){}
  srvVer='檢查中';fetch('/api/draw').then(r=>r.text()).then(t=>{srvVer=/^draw\.js v\d+/.test(t)?t:'⚠️ 找不到最新的 api/draw.js，請上傳到 GitHub 的 api 資料夾';paintStat()}).catch(()=>{srvVer='?'});
  $('mimg').src=chosen;
