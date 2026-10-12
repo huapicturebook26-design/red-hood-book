@@ -153,12 +153,13 @@ const FAMOUS=/皮克敏|寶可夢|神奇寶貝|皮卡丘|比卡超|伊布|噴火
 let wolfP=null,failMsg={},redoBack=null,lookStep=false,lookName='',look={},saidFx={},book=null,st={},said={},node=0,pending='',cur=1,timer=null,tcur=0,chain=Promise.resolve(),flipping=false,wt=null,srvVer='',lastMode='',lastErr='',lastDbg='';
 const find=(k,id)=>Q.find(q=>q.k===k).o.find(o=>o.id===id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const spk=t=>String(t).replace(/同樂/g,'同歡樂').replace(/樂器/g,'樂器');
 let sayTok=0;
 function speakSeq(parts){if(!talk||!window.speechSynthesis)return;speechSynthesis.cancel();const tok=++sayTok;let i=0;
- const next=()=>{if(tok!==sayTok||i>=parts.length)return;const pr=parts[i++];const u=new SpeechSynthesisUtterance(pr[0]);u.lang='zh-TW';u.rate=.9;let d=false;const fin=()=>{if(d)return;d=true;setTimeout(next,pr[1]||0)};u.onend=fin;u.onerror=fin;speechSynthesis.speak(u)};next()}
+ const next=()=>{if(tok!==sayTok||i>=parts.length)return;const pr=parts[i++];const u=new SpeechSynthesisUtterance(spk(pr[0]));u.lang='zh-TW';u.rate=.9;let d=false;const fin=()=>{if(d)return;d=true;setTimeout(next,pr[1]||0)};u.onend=fin;u.onerror=fin;speechSynthesis.speak(u)};next()}
 function readPage(){if(mode!=='story'||cur<2)return;const parts=[[String(textFor(cur)).replace(/\n/g,'，'),2000]];
  const n=NODES[node];if(n&&n.p===cur&&st[cur]==='idle'&&!said[cur])parts.push([lookStep?'哇，'+lookName+'！它長什麼樣子呢？':n.q,0]);else parts[0][1]=0;speakSeq(parts)}
-function say(t){sayTok++;if(!talk||!window.speechSynthesis)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='zh-TW';u.rate=.9;speechSynthesis.speak(u)}
+function say(t){sayTok++;if(!talk||!window.speechSynthesis)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(spk(t));u.lang='zh-TW';u.rate=.9;speechSynthesis.speak(u)}
 
 /* ---------- 翻頁 ---------- */
 const strip=h=>h.replace(/ id="[^"]*"/g,'');
