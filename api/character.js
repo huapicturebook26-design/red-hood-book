@@ -9,29 +9,33 @@ const SKIN = {
   deep: 'deep brown skin',
 };
 const HAIRCOLOR = { fair: 'light brown', tan: 'brown', brown: 'dark brown', deep: 'dark black' };
-const ITEMS = {
-  apple: 'red apples', bread: 'bread', flower: 'colorful flowers',
-  cake: 'a small cake', berry: 'strawberries', milk: 'a bottle of milk',
-};
-const list = (a) => (a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]);
-
-function buildPrompt({ gender, hair, skin, basket }) {
+const COLOR = { blue: 'blue', yellow: 'yellow', pink: 'pink', green: 'green' };
+const TOP = {}; for (const k in COLOR) { TOP[k + '_s'] = `${COLOR[k]} short-sleeved shirt`; TOP[k + '_l'] = `${COLOR[k]} long-sleeved shirt`; }
+const BOTTOM = { shorts: 'black shorts', pants: 'long black trousers', flare: 'bell-bottom flared trousers', jeans: 'blue jeans', aline: 'an A-line skirt', tutu: 'a puffy tutu skirt' };
+const HAIR = ['long', 'braid', 'pony', 'twin', 'buzz', 'bob', 'curl', 'short'];
+function buildPrompt({ gender, hair, skin, top, bottom }) {
   const c = HAIRCOLOR[skin];
-  const items = basket.length ? basket.map((k) => ITEMS[k]) : [ITEMS.apple, ITEMS.bread];
-  const hairText =
-    hair === 'long'
-      ? gender === 'girl'
-        ? `long ${c} wavy hair that flows out from under the hood and hangs in front of both shoulders`
-        : `long ${c} hair that hangs down in front of both shoulders on top of the cape, symmetrical on the left and right sides of his face`
-      : gender === 'girl'
-      ? `short ${c} bob hair peeking out from under the hood`
-      : `short ${c} hair peeking out from under the hood`;
-  const who =
-    gender === 'girl'
-      ? `a girl with ${hairText} and ${SKIN[skin]}. She wears the same red hooded cape with the hood up and a light dress, and holds the wicker basket in front of her`
-      : `a boy with ${hairText} and ${SKIN[skin]}. Boyish face with thick dark straight eyebrows, plain small black oval eyes, a confident cheerful smile, and a slightly squarer jaw. He wears the red hooded cape with the hood up over a simple light blue shirt and brown shorts, and holds the wicker basket in front of him`;
+  const g = gender === 'girl';
+  const back = 'The red hood is pushed back and rests on the shoulders so the hairstyle is fully visible. ';
+  const H = {
+    long: `very long ${c} hair that falls past the shoulders and hangs in front of both shoulders over the cape, symmetrical on both sides of the face`,
+    braid: `${c} hair in two neat braids that hang in front of both shoulders over the cape`,
+    pony: `${c} hair tied up in one ponytail that swings behind the head`,
+    twin: `${c} hair tied in two pigtails, one on each side of the head, hanging down`,
+    buzz: `a very short ${c} buzz cut, close-cropped hair`,
+    bob: `a ${c} chin-length bob haircut with straight bangs`,
+    curl: `short ${c} hair with the ends curling inward, a neat inward-curled short cut`,
+    short: `short ${c} hair`,
+  }[hair];
+  const hoodNote = hair === 'long' ? '' : back;
+  const topT = TOP[top] || (g ? 'light blue short-sleeved shirt' : 'light blue short-sleeved shirt');
+  const botT = BOTTOM[bottom] || (g ? 'an A-line skirt' : 'brown shorts');
+  const clothes = `Under the red cape she/he wears a ${topT} and ${botT}; the cape hangs open at the front so the whole outfit, the sleeves and the legs are clearly visible`.replace('she/he', g ? 'she' : 'he');
+  const who = g
+    ? `a girl with ${H} and ${SKIN[skin]}. ${hoodNote}She wears the same red hooded cape. ${clothes}. She holds the wicker basket in front of her`
+    : `a boy with ${H} and ${SKIN[skin]}. Boyish face with thick, bold, dark sword-shaped eyebrows (strong straight angled brows), plain small black oval eyes with NO eyelashes at all, a confident cheerful smile, and a slightly squarer jaw. ${hoodNote}He wears the same red hooded cape. ${clothes}. He holds the wicker basket in front of him`;
   return (
-    `Redraw the child in the reference image as ${who}. The basket has ${list(items)} in it. ` +
+    `Redraw the child in the reference image as ${who}. The basket holds a few apples and bread. ` +
     `Facing the viewer, full body, standing on the forest path, face clearly visible. ` +
     `Crisp clean crayon linework, sharp details, same crayon drawing style with light wash of color, ` +
     `visible waxy crayon strokes, rough paper grain, warm gentle palette. No signature, no stamp, no text`
@@ -48,9 +52,9 @@ module.exports = async (req, res) => {
   let b = req.body;
   if (typeof b === 'string') { try { b = JSON.parse(b); } catch { b = {}; } }
   b = b || {};
-  const basket = Array.isArray(b.basket) ? b.basket.filter((k) => ITEMS[k]).slice(0, 3) : [];
-  const a = { gender: b.gender, hair: b.hair, skin: b.skin, basket };
-  if (!['girl', 'boy'].includes(a.gender) || !['long', 'short'].includes(a.hair) || !SKIN[a.skin]) {
+  if (b.check) return res.status(200).json({ ok: true });
+  const a = { gender: b.gender, hair: b.hair, skin: b.skin, top: b.top, bottom: b.bottom };
+  if (!['girl', 'boy'].includes(a.gender) || !HAIR.includes(a.hair) || !SKIN[a.skin]) {
     return res.status(400).json({ error: '選項不完整' });
   }
 
