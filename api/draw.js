@@ -1,6 +1,6 @@
 // 故事頁生成：Gemini（或備用的 MyMemory）把孩子的話織進小紅帽的故事框架，再由 Kontext 用同一個角色畫出這一頁
 // 另外：GET /api/page?u=圖片網址 兼任圖片代理，供列印頁使用（不需要另外的 img.js）
-const VERSION = 'draw.js v25';
+const VERSION = 'draw.js v26';
 const FAL_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const FAL_MULTI = 'https://fal.run/fal-ai/flux-pro/kontext/multi';
 const MODELS = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(Boolean))];
@@ -287,6 +287,7 @@ module.exports = async (req, res) => {
       (chars.length
         ? `Add only ${chars.join('; ')} as other characters, each clearly visible and clearly different from the child, with no red hood, and nobody else. `
         : 'No other characters. ') +
+      (page === 2 ? `There is no wolf and no animal anywhere in this picture. ` : '') + `The little girl is an ordinary human child: no tail, no fur, no animal ears; only the wolf has a tail. ` +
       `Any wolf is drawn as an upright person-like figure standing on two legs like a human (wolf head, fur and fluffy tail, human posture and human-like hands), never on all fours. All hands are clearly drawn with five distinct, sharp, well-defined fingers and clean line work, never blurry. Every character has exactly two arms, two hands and two legs, no extra limbs. Same crayon drawing style, no text, no letters, no speech bubbles, no thought bubbles.`;
     const callFal = async (p, tol, useRefs = true) => {
       const body = { prompt: p, aspect_ratio: '3:4', output_format: 'jpeg', ...(tol ? { safety_tolerance: tol } : {}) };
