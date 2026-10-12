@@ -121,9 +121,26 @@ addEventListener('resize',fit);fit();
 
 const Q=[
  {k:'gender',t:'小紅帽是男生，還是女生呢？',o:[{id:'girl',l:'女生',e:'👧',w:['女','妹','姊','姐']},{id:'boy',l:'男生',e:'👦',w:['男','弟','哥']}]},
- {k:'hair',t:'頭髮是長長的，還是短短的？',o:[{id:'long',l:'長長的',e:'🎀',w:['長','辮']},{id:'short',l:'短短的',e:'✂️',w:['短','平頭']}]},
+ {k:'hair',t:'小紅帽的頭髮是什麼樣子呢？',o:[
+  {id:'long',l:'超級長髮',e:'👸',w:['超級長','長髮','長長','很長']},
+  {id:'braid',l:'綁辮子',e:'🎀',w:['辮']},
+  {id:'pony',l:'馬尾',e:'🐴',w:['馬尾']},
+  {id:'twin',l:'雙馬尾',e:'🎎',w:['雙馬尾','兩個馬尾','兩條馬尾']},
+  {id:'buzz',l:'平頭',e:'💈',w:['平頭','小平頭']},
+  {id:'bob',l:'鮑伯頭',e:'👩',w:['鮑伯','包伯','波波頭']},
+  {id:'curl',l:'內彎短髮',e:'✂️',w:['內彎','內彎短']},
+  {id:'short',l:'一般短髮',e:'🙂',w:['短短','短髮','一般短']}]},
  {k:'skin',t:'小紅帽的皮膚是什麼顏色？',o:[{id:'fair',l:'淺淺的',c:'#ffe0c8',w:['白','淺','粉']},{id:'tan',l:'黃黃的',c:'#f0c196',w:['黃','米']},{id:'brown',l:'棕棕的',c:'#c28a5e',w:['棕','咖啡','小麥']},{id:'deep',l:'深深的',c:'#7d5238',w:['黑','深','巧克力']}]},
- {k:'basket',multi:1,t:'水果籃裡有什麼呢？最多三樣喔！',o:[{id:'apple',l:'蘋果',e:'🍎',w:['蘋果']},{id:'bread',l:'麵包',e:'🍞',w:['麵包']},{id:'flower',l:'花',e:'🌸',w:['花']},{id:'cake',l:'蛋糕',e:'🍰',w:['蛋糕']},{id:'berry',l:'草莓',e:'🍓',w:['草莓']},{id:'milk',l:'牛奶',e:'🥛',w:['牛奶']}]}
+ {k:'top',t:'上衣是什麼顏色、什麼袖子呢？',o:[
+  {id:'blue_s',l:'藍色短袖',c:'#5b8fd6',w:[]},{id:'blue_l',l:'藍色長袖',c:'#3f6fb5',w:[]},
+  {id:'yellow_s',l:'黃色短袖',c:'#f2cf4a',w:[]},{id:'yellow_l',l:'黃色長袖',c:'#e0b72c',w:[]},
+  {id:'pink_s',l:'粉紅短袖',c:'#f4a6bd',w:[]},{id:'pink_l',l:'粉紅長袖',c:'#e98aa8',w:[]},
+  {id:'green_s',l:'綠色短袖',c:'#7cc08a',w:[]},{id:'green_l',l:'綠色長袖',c:'#56a46a',w:[]}],
+  m:t=>{const col={藍:'blue',黃:'yellow',粉:'pink',綠:'green'};let c='',sl='';for(const k in col)if(t.includes(k))c=col[k];if(/長袖|長的/.test(t))sl='l';else if(/短袖|短的/.test(t))sl='s';return c&&sl?[[9,c+'_'+sl]]:[]}},
+ {k:'bottom',t:'下面穿什麼呢？',o:[
+  {id:'shorts',l:'黑色短褲',e:'🩳',w:['短褲']},{id:'pants',l:'黑色長褲',e:'👖',w:['長褲']},
+  {id:'flare',l:'喇叭褲',e:'👖',w:['喇叭']},{id:'jeans',l:'牛仔褲',e:'👖',w:['牛仔']},
+  {id:'aline',l:'A字裙',e:'👗',w:['A字','a字','A 字','一字裙','阿字']},{id:'tutu',l:'蓬蓬裙',e:'🩰',w:['蓬蓬','澎澎']}]}
 ];
 const NODES=[
  {p:3,q:'小朋友，你覺得狼會對小紅帽說什麼呢？',c:['好香的花，可以送我一朵嗎？','小紅帽，你要去哪裡呀？','我肚子好餓喔！','我們來玩遊戲吧！']},
@@ -187,10 +204,10 @@ function turn(update,dir){
 
 /* ---------- 設計階段 ---------- */
 function chipsHtml(){
- const h=[];['gender','hair','skin'].forEach(k=>{if(ans[k]){const o=find(k,ans[k]);h.push(`<div class="chip">${o.c?`<i style="background:${o.c}"></i>`:o.e}</div>`)}});
- ans.basket.forEach(id=>h.push(`<div class="chip">${find('basket',id).e}</div>`));return h.join('');
+ const h=[];['gender','hair','skin','top','bottom'].forEach(k=>{if(ans[k]){const o=find(k,ans[k]);h.push(`<div class="chip">${o.c?`<i style="background:${o.c}"></i>`:o.e}</div>`)}});
+ return h.join('');
 }
-const MSG=['小紅帽正在換衣服⋯','正在挑水果籃⋯','蠟筆正在塗顏色⋯','快好了，再等一下下！'];
+const MSG=['小紅帽正在換衣服⋯','正在整理頭髮⋯','蠟筆正在塗顏色⋯','快好了，再等一下下！'];
 function paintDesign(quiet){
  const n=Q.length+1;let L='',R='';
  const dots=`<div class="dots">${Array.from({length:n},(_,i)=>`<button data-act="dot" data-i="${i}" aria-label="第${i+1}步" class="${i===step&&phase==='q'||(phase!=='q'&&i===n-1)?'now':i<step?'done':''}"></button>`).join('')}</div>`;
@@ -227,7 +244,7 @@ function choose(id){
  paintDesign(true);
  if(!q.multi)setTimeout(()=>{if(phase==='q'&&Q[step]===q)goStep(step+1)},1100*TM());
 }
-function match(q,t){const h=[];q.o.forEach(o=>{let s=0;o.w.forEach(w=>{if(t.includes(w))s=Math.max(s,w.length)});if(s)h.push([s,o.id])});return h.sort((a,b)=>b[0]-a[0])}
+function match(q,t){if(q.m){const r=q.m(t);if(r.length)return r}const h=[];q.o.forEach(o=>{let s=0;o.w.forEach(w=>{if(t.includes(w))s=Math.max(s,w.length)});if(s)h.push([s,o.id])});return h.sort((a,b)=>b[0]-a[0])}
 function heardAns(t){
  const q=Q[step],H=$('heard');if(!q||phase!=='q')return;const h=match(q,t);
  if(!h.length){H.textContent=`聽到：「${t}」 沒有對到，再說一次，或用點的也可以喔`;return}
@@ -444,6 +461,14 @@ async function intro(){
  $('mini').classList.add('opening');$('bk').classList.remove('shrunk');I.classList.add('gone');await wait(1500);
  $('mini').className='mini';
 }
+function gate(){return new Promise(async ok=>{
+ const test=async c=>{try{const r=await fetch('/api/character',{method:'POST',headers:{'Content-Type':'application/json','x-access-code':c},body:JSON.stringify({check:1})});return r.ok}catch(_){return true}};
+ const c0=sessionStorage.getItem('code')||'';if(await test(c0)){ok();return}
+ const g=document.createElement('div');g.style.cssText='position:fixed;inset:0;z-index:50;background:#e4efdc;display:flex;align-items:center;justify-content:center;font-family:inherit';
+ g.innerHTML='<div style="background:#fffdf6;border-radius:24px;padding:28px 32px;text-align:center;box-shadow:0 8px 30px #0003;max-width:420px"><div style="font-size:2.4em">🔑</div><h2 style="margin:.3em 0">請輸入展場通行碼</h2><input id="gc" type="text" autocomplete="off" style="font-size:1.4em;padding:.4em .6em;border:2px solid #b9c7a8;border-radius:12px;width:12em;text-align:center"><div id="ge" style="color:#b00020;min-height:1.4em;margin:.4em 0"></div><button id="gb" style="font-size:1.2em;padding:.5em 1.6em;border:0;border-radius:999px;background:#4a8a52;color:#fff">開始</button></div>';
+ document.body.appendChild(g);const go=async()=>{const v=g.querySelector('#gc').value.trim();if(!v)return;if(await test(v)){sessionStorage.setItem('code',v);g.remove();ok()}else{g.querySelector('#ge').textContent='通行碼不對，再試一次';}};
+ g.querySelector('#gb').onclick=go;g.querySelector('#gc').addEventListener('keydown',e=>{if(e.key==='Enter')go()});setTimeout(()=>g.querySelector('#gc').focus(),100)})}
+gate().then(()=>{talk=true;try{say(Q[0].t)}catch(_){}});
 intro();
 </script>
 </body>
